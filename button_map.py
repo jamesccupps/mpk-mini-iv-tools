@@ -119,12 +119,24 @@ def select_controls(argv):
     return chosen, True
 
 
+OUT_PATH = "button_map.json"
+
+
 def load_existing():
     try:
-        with open("button_map.json", encoding="utf-8") as fh:
+        with open(OUT_PATH, encoding="utf-8") as fh:
             return json.load(fh)
     except Exception:
         return {}
+
+
+def save(results):
+    """Written after every control, so closing the window loses nothing."""
+    try:
+        with open(OUT_PATH, "w", encoding="utf-8") as fh:
+            json.dump(results, fh, indent=2)
+    except OSError as exc:
+        print(f"  ! could not save: {exc}")
 
 
 def main(argv):
@@ -151,8 +163,10 @@ def main(argv):
 
     print(f"Listening on {len(listeners)} ports.\n")
     print("For each control: press it, or hit Enter to skip.")
-    print("Tip: run this in DAW mode AND again in MIDI mode -- some buttons")
-    print("are swallowed by the DAW script and only transmit in MIDI mode.\n")
+    print(f"Progress is saved to {OUT_PATH} after every control, so you can")
+    print("stop whenever you like and pick up later with --only.")
+    print("Tip: run with your DAW closed -- an open DAW's control script")
+    print("swallows some buttons, and which ones is worth knowing too.\n")
 
     def drain():
         got = []
@@ -187,6 +201,7 @@ def main(argv):
 
             lines = summarise(events)
             results[label] = lines
+            save(results)               # after every control, not at the end
             if lines:
                 for line in lines[:4]:
                     print(f"      {line}")
@@ -209,9 +224,17 @@ def main(argv):
         for line in lines or ["  (nothing)"]:
             print(f"  {line}")
 
-    with open("button_map.json", "w", encoding="utf-8") as fh:
-        json.dump(results, fh, indent=2)
-    print("\nWritten to button_map.json")
+    save(results)
+    done = sum(1 for v in results.values() if v)
+    print(f"\nWritten to {OUT_PATH} -- {len(results)} controls tried, "
+          f"{done} produced MIDI.")
+    remaining = [label for label, _ in CONTROLS if label not in results]
+    if remaining:
+        print(f"\nStill unmapped ({len(remaining)}): "
+              f"{', '.join(remaining[:6])}"
+              f"{' ...' if len(remaining) > 6 else ''}")
+        print("Pick up where you left off with:")
+        print(f"  py -3 button_map.py --only \"{remaining[0]}\"")
     return 0
 
 
