@@ -95,8 +95,15 @@ surprises you — tick "Enable / disable" on the ones you want.
 ### Worked example: a one-button looper for Ableton
 
 `profiles/Ableton Looper.json` turns the top four keys into Live commands —
-Capture MIDI, Quantize, Undo, New MIDI track — so a whole layered take can be
+Duplicate, Quantize, Undo, New MIDI track — so a whole layered take can be
 built without touching the computer.
+
+**Capture MIDI is deliberately not in there.** Live 12 removed its keyboard
+shortcut, and `Ctrl+Shift+C` is "Copy Time" in Live 12, so sending that fires
+the wrong command. MIDI-map the Capture button instead: enable **Remote** on
+the keyboard's input port, press **Ctrl+M**, click the Capture button, press a
+pad, then **Ctrl+M** again. Mapping the control directly beats driving it
+through a keystroke, and it survives the DAW rearranging its shortcuts.
 
 It uses the **top keys rather than pads** on purpose. A macro on a pad still
 plays its drum sound, because the DAW hears the keyboard directly and

@@ -4,11 +4,11 @@
   "mappings": [
     {
       "id": "loop0001",
-      "name": "Top key C5 - Capture MIDI",
+      "name": "Top key C5 - Duplicate clip or scene",
       "enabled": true,
       "block": true,
       "trigger": { "type": "note_on", "channel": -1, "number": 72, "value": null },
-      "actions": [{ "do": "keys", "keys": "ctrl+shift+c" }]
+      "actions": [{ "do": "keys", "keys": "ctrl+d" }]
     },
     {
       "id": "loop0002",
