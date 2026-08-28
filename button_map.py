@@ -5,10 +5,15 @@ nothing about the buttons. This walks you through them one at a time and
 records what each one transmits, so the result is labelled rather than a wall
 of undifferentiated MIDI.
 
-    py -3 button_map.py
+    py -3 button_map.py                    # walk every control
+    py -3 button_map.py --only ARP LATCH   # redo just these, keep the rest
 
 Press the control it names, or press Enter to skip it. Ctrl+C to stop early.
 Results print as a table and are written to button_map.json.
+
+--only matches on any part of the label, case-insensitively, and merges into
+an existing button_map.json rather than replacing it -- so a control you
+fumbled can be redone on its own without repeating the whole run.
 
 Read-only: it never transmits to the keyboard.
 """
@@ -96,7 +101,39 @@ def summarise(events):
     return out
 
 
-def main():
+def select_controls(argv):
+    """Honour --only, matching loosely so exact punctuation is not needed."""
+    if "--only" not in argv:
+        return CONTROLS, False
+    wanted = [a.lower() for a in argv[argv.index("--only") + 1:]
+              if not a.startswith("--")]
+    if not wanted:
+        return CONTROLS, False
+    chosen = [(label, prompt) for label, prompt in CONTROLS
+              if any(w in label.lower() for w in wanted)]
+    if not chosen:
+        print(f"Nothing matched {wanted}. Known labels:")
+        for label, _ in CONTROLS:
+            print(f"  {label}")
+        sys.exit(1)
+    return chosen, True
+
+
+def load_existing():
+    try:
+        with open("button_map.json", encoding="utf-8") as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def main(argv):
+    controls, merging = select_controls(argv)
+    results = load_existing() if merging else {}
+    if merging:
+        print(f"Redoing {len(controls)} control(s), keeping the other "
+              f"{len(results)} already mapped.\n")
+
     names = winmidi.input_devices()
     idx = [i for i, n in enumerate(names) if "mpk mini" in n.lower()]
     if not idx:
@@ -128,9 +165,8 @@ def main():
                 got.append((port, describe(kind, payload)))
         return got
 
-    results = {}
     try:
-        for label, prompt in CONTROLS:
+        for label, prompt in controls:
             drain()                                    # clear anything stale
             try:
                 input(f"  {label:<20} -> {prompt}, then Enter: ")
@@ -180,4 +216,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
