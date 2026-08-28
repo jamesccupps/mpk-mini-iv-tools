@@ -92,6 +92,21 @@ below was worked out.
 The included profile has six example macros. They ship **disabled** so nothing
 surprises you — tick "Enable / disable" on the ones you want.
 
+### Worked example: a one-button looper for Ableton
+
+`profiles/Ableton Looper.json` turns the top four keys into Live commands —
+Capture MIDI, Quantize, Undo, New MIDI track — so a whole layered take can be
+built without touching the computer.
+
+It uses the **top keys rather than pads** on purpose. A macro on a pad still
+plays its drum sound, because the DAW hears the keyboard directly and
+"swallow" only governs this app's own passthrough. Notes above 51 fall outside
+a Drum Rack's sample range, so they are silent while still firing the macro.
+Route the DAW through loopMIDI instead if you want macro *pads* that make no
+sound.
+
+This profile auto-activates when Ableton has focus.
+
 ### Playing notes *and* running macros at once
 
 A macro that swallows its message stops it reaching the DAW, and `chord`/`cc`

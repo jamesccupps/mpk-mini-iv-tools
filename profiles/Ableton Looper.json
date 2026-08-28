@@ -1,0 +1,38 @@
+{
+  "name": "Ableton Looper",
+  "match_app": "Ableton Live 12 Lite.exe",
+  "mappings": [
+    {
+      "id": "loop0001",
+      "name": "Top key C5 - Capture MIDI",
+      "enabled": true,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 72, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+shift+c" }]
+    },
+    {
+      "id": "loop0002",
+      "name": "B4 - Quantize the clip",
+      "enabled": true,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 71, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+u" }]
+    },
+    {
+      "id": "loop0003",
+      "name": "A#4 - Undo",
+      "enabled": true,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 70, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+z" }]
+    },
+    {
+      "id": "loop0004",
+      "name": "A4 - New MIDI track for the next part",
+      "enabled": true,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 69, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+shift+t" }]
+    }
+  ]
+}
