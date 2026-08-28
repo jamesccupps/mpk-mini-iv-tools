@@ -376,15 +376,31 @@ class DeviceView(ttk.Frame):
         return cc - 24 if 24 <= cc <= 31 else None   # factory default
 
     def _pad_index(self, note, chan):
-        """Pads and keys can share note numbers, so the channel decides."""
+        """Pads and keys can share note numbers, so the channel decides.
+
+        The keyboard gives no MIDI indication of the selected bank -- pressing
+        BANK A/B only recolours the button itself -- so the bank is inferred
+        from which half of the pad table the note falls in, and the view
+        follows along. Otherwise a bank B hit would light the right pad with
+        the wrong label.
+        """
         if chan != self.pad_channel:
             return None
         if self.preset:
             for i, pad in enumerate(self.preset.pads):
                 if pad["note"] == note:
+                    self._follow_bank("A" if i < 8 else "B")
                     return i % 8
             return None
-        return note - 36 if 36 <= note <= 51 else None
+        if 36 <= note <= 51:
+            self._follow_bank("A" if note < 44 else "B")
+            return (note - 36) % 8
+        return None
+
+    def _follow_bank(self, bank):
+        if bank != self.bank.get():
+            self.bank.set(bank)
+            self._relabel()
 
     def _key_hit(self, note, vel, chan):
         if not (self.key_base <= note < self.key_base + KEY_COUNT):
