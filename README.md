@@ -12,6 +12,12 @@ Pure standard-library Python — no `pip install`, no dependencies.
 **Requirements:** Windows, Python 3.8+. Nothing else. It uses `winmm` and
 `SendInput` through `ctypes`, and Tkinter for the UI.
 
+![The Device tab](docs/device-tab.png)
+
+*The panel lights up as you play it. Pad 3A has just been hit; knobs 1 and 3
+show their values. Every label is read off the preset actually loaded on the
+keyboard, so the numbers are never a guess.*
+
 > [!WARNING]
 > The SysEx tools here talk to real hardware over a protocol that was
 > reverse-engineered, not documented. Two behaviours to know before you run
@@ -201,6 +207,19 @@ Knob record (20 bytes): `cc`, `min`, `max`, `mode`, then a 16-byte ASCII name.
 Factory defaults read back as pads = notes 36–51 / CC 32–47 / PC 0–15, and
 knobs = CC 24–31 named `KNOB1`–`KNOB8`.
 
+### The message envelope
+
+Every message seen from this device, in either direction, has the same shape:
+
+```
+F0 47 <dev> 5D <opcode> <lenMSB> <lenLSB> <payload...> F7
+```
+
+`<dev>` is `00` or `7F` (both are answered). Length is 14 bits split over two
+7-bit bytes: `(MSB << 7) | LSB`. Confirmed against four opcodes — `0x19`,
+`0x2A`, `0x66` and `0x67` — so `mpk_preset.parse_frame()` unwraps any of them
+and `decode_message()` puts the known ones into words.
+
 ### Messages the keyboard sends unprompted
 
 Captured live while operating the hardware:
@@ -234,13 +253,25 @@ Two rules learned the hard way:
 ### Tools
 
 ```bash
-py -3 dump_presets.py          # all 14 presets, plain English
+py -3 dump_presets.py          # the current preset, plain English
+py -3 dump_presets.py --all    # every slot (changes what is loaded, see above)
 py -3 dump_presets.py --json   # machine readable
 py -3 dump_presets.py --raw    # hex
+py -3 device_info.py           # firmware version and serial number
 py -3 re_probe.py              # protocol reconnaissance
+py -3 port_scout.py            # which of the four USB ports carries what
+py -3 button_map.py            # guided: what each button and the encoder send
+py -3 audio_test.py --list     # unrelated to MIDI; identifies audio outputs
 ```
 
-Both are **read-only**. Nothing here writes to the keyboard.
+All of these are **read-only**. Nothing here writes to the keyboard's memory.
+
+`button_map.py` is worth a mention: the preset dump covers pads and knobs but
+says nothing about the buttons, so what ARP, LATCH, NOTE REPEAT, TAP TEMPO,
+UNDO, LOOP, transport and the encoder transmit is undocumented. That script
+walks you through them one at a time and writes a labelled `button_map.json`.
+Run it once in DAW mode and once in MIDI mode — the DAW script swallows some
+buttons, and which ones is itself worth knowing.
 
 ### Not done yet: writing presets back
 
@@ -254,17 +285,36 @@ on a slot you don't care about, and read it back to confirm.
 main.py                 launcher
 MPK Macro Studio.bat    double-click this
 dump_presets.py         read presets from the keyboard
+device_info.py          firmware version and serial
 re_probe.py             SysEx reconnaissance
+port_scout.py           identify the four USB MIDI ports
+button_map.py           guided button/encoder mapper
+audio_test.py           tone through each Windows audio output
 profiles/*.json         your macros, one file per profile
-settings.json           last used ports
+settings.json           last used ports (not committed)
 mpkmacro/
   winmidi.py            MIDI in/out + SysEx via winmm
   winput.py             SendInput keystrokes, foreground app
   engine.py             matching and action execution
   gui.py                Tkinter UI
   device_view.py        the live panel drawing
-  mpk_preset.py         preset format
+  mpk_preset.py         preset format and message decoding
+tests/                  79 tests, no hardware required
 ```
+
+## Tests
+
+```bash
+py -3 -m unittest discover -s tests -t .
+```
+
+79 tests, no keyboard needed. They run against `tests/fixtures.py`, which holds
+real SysEx captured from hardware — an actual 284-byte preset dump, the identity
+reply, both pad-mode messages and both status messages. So the parser is
+verified against what the device genuinely sends rather than against examples
+written to match the parser.
+
+The serial number in the identity fixture is zeroed.
 
 ## Notes
 

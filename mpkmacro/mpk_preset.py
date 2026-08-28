@@ -25,9 +25,20 @@ from __future__ import annotations
 
 import json
 
+AKAI_ID = 0x47
 PRODUCT_ID = 0x5D
+
+# Opcodes. 0x66/0x67 are the documented MPK mini dump request/reply. 0x19 and
+# 0x2A were captured coming *out* of the keyboard while operating it -- their
+# meaning is inferred from what the hardware was doing at the time.
+OP_STATUS = 0x19        # emitted on connect
+OP_PAD_MODE = 0x2A      # emitted when the pad mode changes
 OP_REQUEST = 0x66
 OP_DUMP = 0x67
+
+# Observed: pads sent Note On on ch10 while mode was 0x00, and CC 34/35
+# (pads use CC 32-47) while mode was 0x02. Other values not yet seen.
+PAD_MODES = {0x00: "Notes", 0x02: "CC#"}
 
 NAME_LEN = 16
 GLOBAL_LEN = 13
@@ -40,8 +51,14 @@ PAYLOAD_LEN = 1 + NAME_LEN + GLOBAL_LEN + PAD_COUNT * PAD_REC + KNOB_COUNT * KNO
 
 
 def request(preset=0, dev=0x00):
-    """Bytes that ask the keyboard for a preset. 0 = current, 1..13 = slots."""
-    return [0xF0, 0x47, dev, PRODUCT_ID, OP_REQUEST, 0x00, 0x01, preset, 0xF7]
+    """Bytes that ask the keyboard for a preset.
+
+    Slots 0 and 1 return byte-identical data, so 0 appears to be an alias for
+    slot 1 rather than a live "current buffer" -- do not rely on it to tell you
+    what is loaded right now. And note the request is not side-effect free: the
+    keyboard appears to LOAD the slot you ask for. See the README.
+    """
+    return [0xF0, AKAI_ID, dev, PRODUCT_ID, OP_REQUEST, 0x00, 0x01, preset, 0xF7]
 
 
 def identity_request():
@@ -128,28 +145,101 @@ class Preset:
         return "\n".join(lines)
 
 
-def parse(message):
-    """Parse a full F0..F7 dump reply. Returns a Preset, or raises ValueError."""
+class Frame:
+    """One Akai MPK mini IV SysEx message, unwrapped.
+
+    Every message seen from this device -- in either direction -- has the same
+    shape:
+
+        F0 47 <dev> 5D <opcode> <lenMSB> <lenLSB> <payload...> F7
+
+    where the length is 14 bits split over two 7-bit bytes. Confirmed against
+    four opcodes: 0x19, 0x2A, 0x66 and 0x67.
+    """
+
+    def __init__(self, dev, opcode, payload):
+        self.dev = dev
+        self.opcode = opcode
+        self.payload = list(payload)
+
+    def __repr__(self):
+        return (f"Frame(dev=0x{self.dev:02X}, opcode=0x{self.opcode:02X}, "
+                f"{len(self.payload)} bytes)")
+
+
+def parse_frame(message):
+    """Unwrap any MPK mini IV SysEx message. Raises ValueError if it isn't one."""
     m = list(message)
-    if len(m) < 9 or m[0] != 0xF0 or m[-1] != 0xF7:
+    if len(m) < 8 or m[0] != 0xF0 or m[-1] != 0xF7:
         raise ValueError("not a complete SysEx message")
-    if m[1] != 0x47:
+    if m[1] != AKAI_ID:
         raise ValueError(f"not an Akai message (manufacturer 0x{m[1]:02X})")
     if m[3] != PRODUCT_ID:
         raise ValueError(f"not an MPK mini IV (product 0x{m[3]:02X})")
-    if m[4] != OP_DUMP:
-        raise ValueError(f"not a preset dump (opcode 0x{m[4]:02X})")
     declared = (m[5] << 7) | m[6]
     payload = m[7:-1]
     if declared != len(payload):
         raise ValueError(
             f"length mismatch: header says {declared}, got {len(payload)}"
         )
-    if len(payload) != PAYLOAD_LEN:
+    return Frame(m[2], m[4], payload)
+
+
+def parse(message):
+    """Parse a full F0..F7 dump reply. Returns a Preset, or raises ValueError."""
+    frame = parse_frame(message)
+    if frame.opcode != OP_DUMP:
+        raise ValueError(f"not a preset dump (opcode 0x{frame.opcode:02X})")
+    if len(frame.payload) != PAYLOAD_LEN:
         raise ValueError(
-            f"unexpected payload size {len(payload)}, expected {PAYLOAD_LEN}"
+            f"unexpected payload size {len(frame.payload)}, "
+            f"expected {PAYLOAD_LEN}"
         )
-    return Preset(payload)
+    return Preset(frame.payload)
+
+
+def decode_message(message):
+    """Describe a SysEx message in words, or None if it isn't recognised.
+
+    Used by the SysEx Lab so replies read as meaning rather than hex.
+    """
+    m = list(message)
+
+    # Universal identity reply -- not an Akai-framed message.
+    if len(m) > 5 and m[:2] == [0xF0, 0x7E] and m[3:5] == [0x06, 0x02]:
+        if len(m) > 9 and m[5] == AKAI_ID:
+            model = m[8] | (m[9] << 7)
+            ver = m[10:14]
+            return (f"Identity reply: Akai product 0x{m[6]:02X}, {model} keys, "
+                    f"firmware {ver[0]}.{ver[1]}{ver[2]}")
+        return "Identity reply (not Akai)"
+
+    try:
+        frame = parse_frame(m)
+    except ValueError:
+        return None
+
+    if frame.opcode == OP_DUMP:
+        try:
+            preset = parse(m)
+        except ValueError as exc:
+            return f"Preset dump, but could not parse it ({exc})"
+        return f"Preset dump: slot {preset.number}, name {preset.name!r}"
+
+    if frame.opcode == OP_REQUEST:
+        slot = frame.payload[0] if frame.payload else "?"
+        return f"Preset dump request for slot {slot}"
+
+    if frame.opcode == OP_PAD_MODE:
+        raw = frame.payload[0] if frame.payload else None
+        name = PAD_MODES.get(raw, "unknown")
+        return f"Pad mode changed to 0x{raw:02X} ({name})" if raw is not None \
+            else "Pad mode changed (no value)"
+
+    if frame.opcode == OP_STATUS:
+        return f"Status message ({len(frame.payload)} bytes)"
+
+    return f"Unknown opcode 0x{frame.opcode:02X} ({len(frame.payload)} bytes)"
 
 
 def to_json(preset):

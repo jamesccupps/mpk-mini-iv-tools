@@ -773,7 +773,11 @@ class App(tk.Tk):
             messagebox.showerror("Bad hex", "Use hex bytes like: F0 47 00 5D ... F7")
             return
         self.engine.device_out.send_sysex(data)
-        self._append_sysex(f"==> {winmidi.hexdump(data)}\n")
+        meaning = mpk_preset.decode_message(data)
+        self._append_sysex(
+            f"==> {winmidi.hexdump(data)}"
+            + (f"\n    {meaning}\n" if meaning else "\n")
+        )
 
     def _identity(self):
         self.sysex_var.set("F0 7E 7F 06 01 F7")
@@ -818,8 +822,12 @@ class App(tk.Tk):
                         self.monitor.delete("1.0", "100.0")
                     self.monitor.see("end")
             elif kind == "sysex":
+                meaning = mpk_preset.decode_message(payload)
+                header = f"<== {len(payload)} bytes"
+                if meaning:
+                    header += f"   {meaning}"
                 self._append_sysex(
-                    f"<== {len(payload)} bytes\n    {winmidi.hexdump(payload)}\n")
+                    f"{header}\n    {winmidi.hexdump(payload)}\n")
                 try:
                     preset = mpk_preset.parse(payload)
                 except ValueError:

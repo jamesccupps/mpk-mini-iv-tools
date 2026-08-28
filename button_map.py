@@ -1,0 +1,154 @@
+"""Guided mapper: find out what every button and the encoder actually send.
+
+The preset dump tells us what the pads and knobs are set to, but it says
+nothing about the buttons. This walks you through them one at a time and
+records what each one transmits, so the result is labelled rather than a wall
+of undifferentiated MIDI.
+
+    py -3 button_map.py
+
+Press the control it names, or press Enter to skip it. Ctrl+C to stop early.
+Results print as a table and are written to button_map.json.
+
+Read-only: it never transmits to the keyboard.
+"""
+from __future__ import annotations
+
+import json
+import sys
+import time
+
+from mpkmacro import winmidi
+
+WAIT = 6.0          # seconds to wait for each control
+SETTLE = 0.35       # keep collecting this long after the first message
+
+# In panel order. Anything the Live script swallows may show nothing -- that
+# is itself a useful result, so it gets recorded as "nothing".
+CONTROLS = [
+    ("OCT -", "the OCT - button"),
+    ("OCT +", "the OCT + button"),
+    ("ARP", "the ARP button"),
+    ("LATCH", "the LATCH button"),
+    ("NOTE REPEAT", "the NOTE REPEAT button"),
+    ("TAP TEMPO", "TAP TEMPO once"),
+    ("BANK A/B", "the BANK A/B button"),
+    ("UNDO", "the UNDO button"),
+    ("LOOP", "the loop button"),
+    ("STOP/PLAY", "the stop/play button"),
+    ("REC", "the record button"),
+    ("AUTOMATION", "the automation button"),
+    ("SHIFT", "SHIFT on its own"),
+    ("PLUGIN/DAW", "the PLUGIN/DAW button"),
+    ("BANK -", "the BANK - button"),
+    ("BANK +", "the BANK + button"),
+    ("ENCODER turn right", "turn the encoder one click clockwise"),
+    ("ENCODER turn left", "turn the encoder one click anticlockwise"),
+    ("ENCODER press", "press the encoder in"),
+    ("PITCH wheel", "move the pitch wheel"),
+    ("MOD wheel", "move the mod wheel"),
+]
+
+
+def describe(kind, payload):
+    if kind == "sysex":
+        return f"SysEx {len(payload)}B: {winmidi.hexdump(payload)}"
+    return winmidi.describe(*payload)
+
+
+def summarise(events):
+    """Collapse a burst into something readable, keeping order."""
+    seen, out = set(), []
+    for port, text in events:
+        key = (port, text.split("value")[0])
+        if key not in seen:
+            seen.add(key)
+            out.append(f"[{port}] {text}")
+    return out
+
+
+def main():
+    names = winmidi.input_devices()
+    idx = [i for i, n in enumerate(names) if "mpk mini" in n.lower()]
+    if not idx:
+        print("MPK mini IV not found. Is it plugged in?")
+        return 1
+
+    listeners = []
+    for i in idx:
+        mi = winmidi.MidiIn()
+        try:
+            mi.open(i)
+            listeners.append((names[i], mi))
+        except winmidi.MidiError as exc:
+            print(f"  ! cannot open {names[i]}: {exc}")
+
+    print(f"Listening on {len(listeners)} ports.\n")
+    print("For each control: press it, or hit Enter to skip.")
+    print("Tip: run this in DAW mode AND again in MIDI mode -- some buttons")
+    print("are swallowed by the DAW script and only transmit in MIDI mode.\n")
+
+    def drain():
+        got = []
+        for port, mi in listeners:
+            while True:
+                try:
+                    kind, payload = mi.queue.get_nowait()
+                except Exception:
+                    break
+                got.append((port, describe(kind, payload)))
+        return got
+
+    results = {}
+    try:
+        for label, prompt in CONTROLS:
+            drain()                                    # clear anything stale
+            try:
+                input(f"  {label:<20} -> {prompt}, then Enter: ")
+            except EOFError:
+                print("\n(no console input available -- run this from a terminal)")
+                break
+
+            events = drain()
+            deadline = time.time() + WAIT
+            while not events and time.time() < deadline:
+                time.sleep(0.01)
+                events = drain()
+            if events:
+                stop = time.time() + SETTLE
+                while time.time() < stop:
+                    time.sleep(0.01)
+                    events += drain()
+
+            lines = summarise(events)
+            results[label] = lines
+            if lines:
+                for line in lines[:4]:
+                    print(f"      {line}")
+                if len(lines) > 4:
+                    print(f"      ... and {len(lines) - 4} more")
+            else:
+                print("      nothing (skipped, or the DAW script consumed it)")
+            print()
+    except KeyboardInterrupt:
+        print("\nstopped early")
+    finally:
+        for _, mi in listeners:
+            mi.close()
+
+    print("=" * 62)
+    print("BUTTON MAP")
+    print("=" * 62)
+    for label, lines in results.items():
+        print(f"\n{label}")
+        for line in lines or ["  (nothing)"]:
+            print(f"  {line}")
+
+    with open("button_map.json", "w", encoding="utf-8") as fh:
+        json.dump(results, fh, indent=2)
+    print("\nWritten to button_map.json")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
