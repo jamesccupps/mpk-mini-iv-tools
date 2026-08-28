@@ -23,9 +23,43 @@ from mpkmacro import winmidi
 WAIT = 6.0          # seconds to wait for each control
 SETTLE = 0.35       # keep collecting this long after the first message
 
-# In panel order. Anything the Live script swallows may show nothing -- that
-# is itself a useful result, so it gets recorded as "nothing".
+# Panel order, left to right. Anything the DAW script swallows shows nothing --
+# that is itself a useful result, so it gets recorded rather than skipped.
+#
+# The knobs and pads ARE included even though the preset dump already gives
+# their assignments: the dump describes MIDI mode, and in DAW mode the control
+# script can remap them or move them to another port. Comparing a DAW-mode run
+# against a MIDI-mode run is the whole point.
 CONTROLS = [
+    # far left
+    ("PITCH wheel", "move the pitch wheel"),
+    ("MOD wheel", "move the mod wheel"),
+
+    # pads -- spot checks, one per row per bank
+    ("PAD 1 (bank A)", "pad 1, bottom-left"),
+    ("PAD 5 (bank A)", "pad 5, top-left"),
+    ("PAD 1 (bank B)", "BANK A/B, then pad 1 again"),
+
+    # centre: display, encoder, bank, shift
+    ("ENCODER turn right", "turn the encoder one click clockwise"),
+    ("ENCODER turn left", "turn the encoder one click anticlockwise"),
+    ("ENCODER press", "press the encoder in"),
+    ("BANK -", "the BANK - button"),
+    ("BANK +", "the BANK + button"),
+    ("SHIFT", "SHIFT on its own"),
+    ("PLUGIN/DAW", "the PLUGIN/DAW button"),
+
+    # the eight knobs, top row then bottom row
+    ("KNOB 1", "turn knob 1"),
+    ("KNOB 2", "turn knob 2"),
+    ("KNOB 3", "turn knob 3"),
+    ("KNOB 4", "turn knob 4"),
+    ("KNOB 5", "turn knob 5"),
+    ("KNOB 6", "turn knob 6"),
+    ("KNOB 7", "turn knob 7"),
+    ("KNOB 8", "turn knob 8"),
+
+    # button strip
     ("OCT -", "the OCT - button"),
     ("OCT +", "the OCT + button"),
     ("ARP", "the ARP button"),
@@ -38,15 +72,10 @@ CONTROLS = [
     ("STOP/PLAY", "the stop/play button"),
     ("REC", "the record button"),
     ("AUTOMATION", "the automation button"),
-    ("SHIFT", "SHIFT on its own"),
-    ("PLUGIN/DAW", "the PLUGIN/DAW button"),
-    ("BANK -", "the BANK - button"),
-    ("BANK +", "the BANK + button"),
-    ("ENCODER turn right", "turn the encoder one click clockwise"),
-    ("ENCODER turn left", "turn the encoder one click anticlockwise"),
-    ("ENCODER press", "press the encoder in"),
-    ("PITCH wheel", "move the pitch wheel"),
-    ("MOD wheel", "move the mod wheel"),
+
+    # keybed
+    ("KEY lowest", "the lowest white key"),
+    ("KEY highest", "the highest white key"),
 ]
 
 
