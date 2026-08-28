@@ -1,0 +1,66 @@
+{
+  "name": "My Macros",
+  "match_app": "",
+  "mappings": [
+    {
+      "id": "ex000001",
+      "name": "Pad 1 - Play / Stop",
+      "enabled": false,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 36, "value": null },
+      "actions": [{ "do": "keys", "keys": "space" }]
+    },
+    {
+      "id": "ex000002",
+      "name": "Pad 2 - Undo",
+      "enabled": false,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 37, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+z" }]
+    },
+    {
+      "id": "ex000003",
+      "name": "Pad 3 - Save",
+      "enabled": false,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 38, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+s" }]
+    },
+    {
+      "id": "ex000004",
+      "name": "Pad 4 - Duplicate",
+      "enabled": false,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 39, "value": null },
+      "actions": [{ "do": "keys", "keys": "ctrl+d" }]
+    },
+    {
+      "id": "ex000005",
+      "name": "Pad 9 (bank B) - C major chord",
+      "enabled": false,
+      "block": true,
+      "trigger": { "type": "note_on", "channel": -1, "number": 44, "value": null },
+      "actions": [
+        {
+          "do": "chord",
+          "notes": [60, 64, 67],
+          "velocity": 100,
+          "length_ms": 400,
+          "channel": 0,
+          "strum_ms": 0
+        }
+      ]
+    },
+    {
+      "id": "ex000006",
+      "name": "Knob 1 - macro (filter + reverb together)",
+      "enabled": false,
+      "block": true,
+      "trigger": { "type": "cc", "channel": -1, "number": 24, "value": null },
+      "actions": [
+        { "do": "cc", "cc": 74, "value": "passthru", "channel": 0, "min": 0, "max": 127 },
+        { "do": "cc", "cc": 91, "value": "passthru", "channel": 0, "min": 0, "max": 80 }
+      ]
+    }
+  ]
+}

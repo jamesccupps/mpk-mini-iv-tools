@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+
+# Local state: which MIDI ports this machine happened to use.
+settings.json
+
+# Captured dumps can contain your unit's serial number.
+*.syx
+sysex-log*.txt
