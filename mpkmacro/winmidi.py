@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import queue
 import threading
+import time
 from ctypes import wintypes
 
 winmm = ctypes.WinDLL("winmm")
@@ -21,6 +22,11 @@ CALLBACK_FUNCTION = 0x00030000
 MIM_DATA = 0x3C3
 MIM_LONGDATA = 0x3C4
 MMSYSERR_NOERROR = 0
+MHDR_DONE = 0x00000001
+
+# How long a SysEx send may take before it is abandoned. A 284-byte message
+# at USB-MIDI speed is a millisecond or two; seconds means something is wrong.
+SYSEX_SEND_TIMEOUT = 2.0
 
 SYSEX_BUFFERS = 4
 SYSEX_BUFFER_SIZE = 8192
@@ -168,7 +174,7 @@ class MidiIn:
         self.handle = HMIDIIN()
         self.queue = queue.SimpleQueue()
         self._cb = MidiInProc(self._callback)  # must stay referenced
-        self._headers = []
+        self._headers = {}          # address -> MIDIHDR, for this session only
         self._buffers = []
         self._refill = queue.SimpleQueue()
         self._refill_thread = None
@@ -178,22 +184,33 @@ class MidiIn:
 
     def open(self, index, sysex=True):
         self.close()
+        # A fresh queue each session. midiInReset() in close() hands every
+        # buffer back through the callback, so the old queue ends up holding
+        # addresses of headers that close() then frees. Reusing it fed those
+        # dangling pointers to the next session's refill thread.
+        self._refill = queue.SimpleQueue()
         _check(
             winmm.midiInOpen(
                 ctypes.byref(self.handle), index, self._cb, 0, CALLBACK_FUNCTION
             ),
             "midiInOpen",
         )
-        if sysex:
-            self._running = True
-            self._refill_thread = threading.Thread(
-                target=self._refill_loop, daemon=True
-            )
-            self._refill_thread.start()
-            for _ in range(SYSEX_BUFFERS):
-                self._add_buffer()
-        _check(winmm.midiInStart(self.handle), "midiInStart")
+        # From here the handle is open, so a failure must close it again
+        # rather than leak it with a refill thread still running.
         self.is_open = True
+        try:
+            if sysex:
+                self._running = True
+                self._refill_thread = threading.Thread(
+                    target=self._refill_loop, args=(self._refill,), daemon=True
+                )
+                self._refill_thread.start()
+                for _ in range(SYSEX_BUFFERS):
+                    self._add_buffer()
+            _check(winmm.midiInStart(self.handle), "midiInStart")
+        except MidiError:
+            self.close()
+            raise
         devs = input_devices()
         self.device_name = devs[index] if index < len(devs) else f"device {index}"
 
@@ -204,9 +221,11 @@ class MidiIn:
         hdr.dwBufferLength = SYSEX_BUFFER_SIZE
         hdr.dwFlags = 0
         self._buffers.append(buf)
-        self._headers.append(hdr)
-        winmm.midiInPrepareHeader(self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr))
-        winmm.midiInAddBuffer(self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr))
+        self._headers[ctypes.addressof(hdr)] = hdr
+        _check(winmm.midiInPrepareHeader(
+            self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr)), "midiInPrepareHeader")
+        _check(winmm.midiInAddBuffer(
+            self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr)), "midiInAddBuffer")
 
     def _callback(self, _h, msg, _inst, p1, _p2):
         if msg == MIM_DATA:
@@ -214,15 +233,20 @@ class MidiIn:
         elif msg == MIM_LONGDATA:
             self._refill.put(int(p1))
 
-    def _refill_loop(self):
+    def _refill_loop(self, refill):
         while self._running:
             try:
-                ptr = self._refill.get(timeout=0.25)
+                ptr = refill.get(timeout=0.25)
             except queue.Empty:
                 continue
             if ptr is None:
                 break
-            hdr = ctypes.cast(ptr, ctypes.POINTER(MIDIHDR)).contents
+            # Look the header up rather than casting the raw address: an
+            # address that isn't one of this session's live headers is never
+            # dereferenced.
+            hdr = self._headers.get(ptr)
+            if hdr is None:
+                continue
             n = hdr.dwBytesRecorded
             if n:
                 data = bytes(hdr.lpData[:n])
@@ -236,11 +260,16 @@ class MidiIn:
     def close(self):
         if not self.is_open:
             return
+        # Stop the refill thread *before* the buffers go away; it may be part
+        # way through copying one out or handing it back to the driver.
         self._running = False
         self._refill.put(None)
+        if self._refill_thread is not None:
+            self._refill_thread.join(timeout=1.0)
+            self._refill_thread = None
         winmm.midiInStop(self.handle)
         winmm.midiInReset(self.handle)
-        for hdr in self._headers:
+        for hdr in self._headers.values():
             winmm.midiInUnprepareHeader(
                 self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr)
             )
@@ -290,9 +319,24 @@ class MidiOut:
         hdr.dwBufferLength = len(raw)
         hdr.dwBytesRecorded = len(raw)
         hdr.dwFlags = 0
-        winmm.midiOutPrepareHeader(self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr))
-        winmm.midiOutLongMsg(self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr))
-        winmm.midiOutUnprepareHeader(self.handle, ctypes.byref(hdr), ctypes.sizeof(hdr))
+        size = ctypes.sizeof(hdr)
+        _check(winmm.midiOutPrepareHeader(self.handle, ctypes.byref(hdr), size),
+               "midiOutPrepareHeader")
+        try:
+            _check(winmm.midiOutLongMsg(self.handle, ctypes.byref(hdr), size),
+                   "midiOutLongMsg")
+            # The driver may send asynchronously, and `buf`/`hdr` are freed when
+            # this returns. With no callback registered, MHDR_DONE is the only
+            # signal that the driver is finished with them.
+            deadline = time.monotonic() + SYSEX_SEND_TIMEOUT
+            while not hdr.dwFlags & MHDR_DONE:
+                if time.monotonic() > deadline:
+                    winmm.midiOutReset(self.handle)   # hands the buffer back
+                    raise MidiError(
+                        f"SysEx send did not complete in {SYSEX_SEND_TIMEOUT}s")
+                time.sleep(0.001)
+        finally:
+            winmm.midiOutUnprepareHeader(self.handle, ctypes.byref(hdr), size)
 
     def close(self):
         if self.is_open:
