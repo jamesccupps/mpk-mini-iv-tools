@@ -1,5 +1,7 @@
 # MPK Macro Studio
 
+[![tests](https://github.com/jamesccupps/mpk-mini-iv-tools/actions/workflows/tests.yml/badge.svg)](https://github.com/jamesccupps/mpk-mini-iv-tools/actions/workflows/tests.yml)
+
 Turns an **Akai MPK mini IV** into a macro controller for Windows, and reads
 the keyboard's own presets over SysEx, using a protocol reverse-engineered for
 this project and documented in [PROTOCOL.md](PROTOCOL.md).

@@ -1,0 +1,38 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: the test job only needs to read the repo.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: unittest (py${{ matrix.python-version }})
+    # Windows only: the app is ctypes over winmm / user32, which load at import.
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      # Pinned by commit SHA, not tag: tags are mutable. The trailing comment
+      # says which version each SHA is. Nothing bumps these automatically --
+      # there is no Dependabot config -- so they are updated by hand.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.1.0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run tests
+        # Stdlib unittest; no dependencies to install. -v lists each test and
+        # its skip reason, so a leg that quietly covers less is visible. CI=true
+        # (set by Actions) enables the check that shipped profiles are disabled.
+        run: python -m unittest discover -s tests -t . -v
