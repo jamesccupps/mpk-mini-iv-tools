@@ -257,6 +257,33 @@ class TestProfileNames(unittest.TestCase):
                 self.assertIsNotNone(self.error(bad))
 
 
+class TestProfileLoading(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self._real_dir = eng.PROFILE_DIR
+        eng.PROFILE_DIR = eng.Path(self.tmp.name)
+        profile("Good").save(eng.PROFILE_DIR / "Good.json")
+        (eng.PROFILE_DIR / "Broken.json").write_text('{"name": "x",,}')
+
+    def tearDown(self):
+        eng.PROFILE_DIR = self._real_dir
+        self.tmp.cleanup()
+
+    def test_a_broken_file_is_reported_not_swallowed(self):
+        errors = []
+        with self.assertLogs("mpkmacro.engine", "ERROR"):
+            profiles = eng.load_profiles(errors)
+        self.assertEqual([p.name for p in profiles], ["Good"])
+        self.assertEqual([name for name, _ in errors], ["Broken.json"])
+
+    def test_the_broken_file_is_left_alone(self):
+        with self.assertLogs("mpkmacro.engine", "ERROR"):
+            eng.load_profiles()
+        self.assertEqual((eng.PROFILE_DIR / "Broken.json").read_text(),
+                         '{"name": "x",,}')
+
+
 def profile(name, match_app=""):
     return eng.Profile({"name": name, "match_app": match_app, "mappings": []})
 

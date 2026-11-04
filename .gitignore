@@ -7,3 +7,7 @@ settings.json
 # Captured dumps can contain your unit's serial number.
 *.syx
 sysex-log*.txt
+
+# Runtime log (see mpkmacro/applog.py).
+*.log
+*.log.[0-9]*

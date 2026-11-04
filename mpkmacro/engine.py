@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
@@ -10,6 +11,8 @@ import uuid
 from pathlib import Path
 
 from . import winmidi, winput
+
+logger = logging.getLogger(__name__)
 
 APP_DIR = Path(__file__).resolve().parent.parent
 PROFILE_DIR = APP_DIR / "profiles"
@@ -114,14 +117,21 @@ def profile_name_error(name, existing_names, profile_dir=None):
     return None
 
 
-def load_profiles():
+def load_profiles(errors=None):
+    """Every profile in PROFILE_DIR, in filename order.
+
+    A file that can't be read is skipped, but never silently: it is logged,
+    and appended to `errors` as (filename, reason) so the UI can say which.
+    """
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     profiles = []
     for path in sorted(PROFILE_DIR.glob("*.json")):
         try:
             profiles.append(Profile.load(path))
-        except Exception:
-            pass
+        except (OSError, ValueError) as exc:     # JSONDecodeError is a ValueError
+            logger.error("skipping profile %s: %s", path.name, exc)
+            if errors is not None:
+                errors.append((path.name, str(exc)))
     return profiles
 
 
@@ -263,7 +273,7 @@ class Engine:
     """Reads MIDI, runs matching macros, optionally forwards to a virtual port."""
 
     def __init__(self, log=None):
-        self.log = log or (lambda msg, kind="info": None)
+        self._ui_log = log or (lambda msg, kind="info": None)
         self.midi_in = winmidi.MidiIn()
         self.midi_out = winmidi.MidiOut()     # for chord/CC macros -> DAW
         self.thru_out = winmidi.MidiOut()     # for passthrough      -> DAW
@@ -282,6 +292,14 @@ class Engine:
         self._threads = []
         self._own_pid = os.getpid()
         self._held = {}
+
+    _LEVELS = {"error": logging.ERROR, "warn": logging.WARNING,
+               "fire": logging.DEBUG}
+
+    def log(self, msg, kind="info"):
+        """To the log file, and to the UI's status line."""
+        logger.log(self._LEVELS.get(kind, logging.INFO), "%s", msg)
+        self._ui_log(msg, kind)
 
     # -- lifecycle ----------------------------------------------------------
 
@@ -521,16 +539,18 @@ class Engine:
 # ---------------------------------------------------------------------------
 
 def load_settings():
+    """Last-used ports. Losing them only costs a re-pick, so a bad file is
+    logged and ignored rather than fatal."""
     if SETTINGS_PATH.exists():
         try:
             return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except (OSError, ValueError) as exc:
+            logger.warning("ignoring %s: %s", SETTINGS_PATH.name, exc)
     return {}
 
 
 def save_settings(data):
     try:
         SETTINGS_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except OSError as exc:
+        logger.warning("could not save %s: %s", SETTINGS_PATH.name, exc)

@@ -1,14 +1,17 @@
 """Tkinter front end for MPK Macro Studio."""
 from __future__ import annotations
 
+import logging
 import queue
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import device_view, mpk_preset
+from . import applog, device_view, mpk_preset
 from . import engine as eng
 from . import winmidi
+
+logger = logging.getLogger(__name__)
 
 PAD_HINT = "Pads are usually notes 36-51. Hit one with the Monitor tab open to be sure."
 
@@ -370,7 +373,10 @@ class App(tk.Tk):
         self._build_tabs()
         self._build_status()
 
-        self.profiles = eng.load_profiles()
+        load_errors = []
+        self.profiles = eng.load_profiles(load_errors)
+        if load_errors:
+            self.after(300, lambda: self._report_bad_profiles(load_errors))
         if not self.profiles:
             prof = eng.Profile({"name": "My Macros", "match_app": "", "mappings": []})
             prof.save(eng.PROFILE_DIR / "My Macros.json")
@@ -381,6 +387,23 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(40, self._drain_ui)
         self._auto_connect()
+
+    # -- errors -------------------------------------------------------------
+
+    def report_callback_exception(self, exc, val, tb):
+        """Tk's hook for an exception in any button or event handler. Its
+        default prints to stderr, which under pythonw is nowhere."""
+        logger.error("unhandled error in the UI", exc_info=(exc, val, tb))
+        messagebox.showerror(
+            "Something went wrong",
+            f"{exc.__name__}: {val}\n\nDetails are in {applog.LOG_PATH.name}.")
+
+    def _report_bad_profiles(self, errors):
+        lines = "\n".join(f"  {name}:  {why}" for name, why in errors)
+        messagebox.showwarning(
+            "Profiles skipped",
+            "These profile files could not be read, so they are not loaded. "
+            "Their files are untouched -- fix the JSON and restart.\n\n" + lines)
 
     # -- layout -------------------------------------------------------------
 
@@ -789,8 +812,11 @@ class App(tk.Tk):
             return
         try:
             data = [int(b, 16) for b in self.sysex_var.get().split()]
+            if any(not 0 <= b <= 0xFF for b in data):
+                raise ValueError
         except ValueError:
-            messagebox.showerror("Bad hex", "Use hex bytes like: F0 47 00 5D ... F7")
+            messagebox.showerror("Bad hex", "Use hex bytes 00-FF, like: "
+                                 "F0 47 00 5D ... F7")
             return
         self.engine.device_out.send_sysex(data)
         meaning = mpk_preset.decode_message(data)
