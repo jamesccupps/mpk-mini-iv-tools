@@ -357,6 +357,7 @@ class App(tk.Tk):
         self.engine = eng.Engine(log=self._log_threadsafe)
         self.engine.monitor_callback = self._monitor_threadsafe
         self.engine.sysex_callback = self._sysex_threadsafe
+        self.engine.profile_callback = self._profile_threadsafe
         self.settings = eng.load_settings()
         self.monitor_paused = tk.BooleanVar(value=False)
 
@@ -518,9 +519,12 @@ class App(tk.Tk):
 
     def _build_status(self):
         self.status = tk.StringVar(value="Ready")
+        self.live_var = tk.StringVar(value="Live profile: (none)")
         bar = ttk.Frame(self, padding=(10, 4))
         bar.pack(fill="x")
         ttk.Label(bar, textvariable=self.status, foreground="#333").pack(side="left")
+        ttk.Label(bar, textvariable=self.live_var, foreground="#333").pack(
+            side="right")
 
     # -- devices ------------------------------------------------------------
 
@@ -590,7 +594,9 @@ class App(tk.Tk):
     def _refresh_profiles(self):
         names = [p.name for p in self.profiles]
         self.profile_combo["values"] = names
-        if self.engine.active_profile and self.engine.active_profile.name in names:
+        if self.profile_var.get() in names:
+            pass                                   # keep what is being edited
+        elif self.engine.active_profile and self.engine.active_profile.name in names:
             self.profile_var.set(self.engine.active_profile.name)
         elif names:
             self.profile_var.set(names[0])
@@ -604,10 +610,12 @@ class App(tk.Tk):
         return self.profiles[0] if self.profiles else None
 
     def _select_profile(self):
+        """Choose the profile to edit. A global one also becomes the fallback;
+        an app-bound one stays dormant until its app has focus."""
         prof = self._current_profile()
         if not prof:
             return
-        self.engine.active_profile = prof
+        self.engine.set_fallback(prof)
         self.app_var.set(prof.match_app)
         self._refresh_tree()
 
@@ -637,7 +645,7 @@ class App(tk.Tk):
             prof = eng.Profile({"name": name, "match_app": "", "mappings": []})
             prof.save(eng.PROFILE_DIR / f"{name}.json")
             self.profiles.append(prof)
-            self.engine.set_profiles(self.profiles, prof)
+            self.engine.set_profiles(self.profiles)
             self.profile_var.set(name)
             self._refresh_profiles()
             dlg.destroy()
@@ -656,7 +664,7 @@ class App(tk.Tk):
         if prof.path and Path(prof.path).exists():
             Path(prof.path).unlink()
         self.profiles.remove(prof)
-        self.engine.set_profiles(self.profiles, self.profiles[0])
+        self.engine.set_profiles(self.profiles)
         self._refresh_profiles()
 
     def _grab_app(self):
@@ -670,6 +678,9 @@ class App(tk.Tk):
             return
         prof.match_app = self.app_var.get().strip()
         prof.save(prof.path or (eng.PROFILE_DIR / f"{prof.name}.json"))
+        # Adding or clearing an app changes whether this can be the fallback.
+        self.engine.set_profiles(self.profiles)
+        self.engine.set_fallback(prof)
         self.status.set(f"Saved {prof.name}")
 
     # -- mappings -----------------------------------------------------------
@@ -805,6 +816,9 @@ class App(tk.Tk):
     def _sysex_threadsafe(self, data):
         self.ui_queue.put(("sysex", data))
 
+    def _profile_threadsafe(self, profile):
+        self.ui_queue.put(("profile", profile.name if profile else None))
+
     def _drain_ui(self):
         for _ in range(200):
             try:
@@ -839,6 +853,8 @@ class App(tk.Tk):
             elif kind == "learn":
                 cb, status, d1, d2 = payload
                 cb(status, d1, d2)
+            elif kind == "profile":
+                self.live_var.set(f"Live profile: {payload or '(none)'}")
         self.after(40, self._drain_ui)
 
     def _on_close(self):
@@ -874,8 +890,10 @@ MACRO KNOBS
   One knob now moves several parameters at once, each with its own min/max.
 
 PROFILES
-  One profile per app. Put the exe name in "Auto-switch when app is"
-  (e.g. Ableton Live 12 Suite.exe) and the profile follows your focus.
+  Put an exe name in "Auto-switch when app is" (e.g. Ableton Live 12 Suite.exe,
+  or several separated by commas) and that profile is live ONLY while that app
+  has focus. A profile with the box left blank is global: the one you last
+  picked is live everywhere else. The status bar shows which profile is live.
 
 KEY NAMES
   ctrl alt shift win, plus f1-f24, space, enter, tab, esc, backspace, delete,

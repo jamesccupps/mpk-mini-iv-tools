@@ -70,9 +70,17 @@ class Profile:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cls(data, path)
 
+    @property
+    def is_global(self):
+        """No app named: usable everywhere, and eligible as the fallback."""
+        return not self.match_app.strip()
+
     def matches_app(self, exe):
-        """match_app is a comma separated list of exe names; blank = always."""
-        if not self.match_app.strip():
+        """match_app is a comma separated list of exe names; blank = never.
+
+        A blank profile is not tied to an app at all -- see pick_profile().
+        """
+        if self.is_global:
             return False
         wanted = [w.strip().lower() for w in self.match_app.split(",") if w.strip()]
         return exe.lower() in wanted
@@ -87,6 +95,23 @@ def load_profiles():
         except Exception:
             pass
     return profiles
+
+
+def first_global(profiles):
+    return next((p for p in profiles if p.is_global), None)
+
+
+def pick_profile(profiles, exe, fallback):
+    """The profile that should be live while `exe` has focus.
+
+    A profile naming an app is live only while that app has focus. Everywhere
+    else the fallback (a global profile, or None) applies -- otherwise a DAW
+    profile would keep firing its shortcuts into a browser after you alt-tab.
+    """
+    for prof in profiles:
+        if prof.matches_app(exe):
+            return prof
+    return fallback
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +212,8 @@ class Engine:
         self.device_out = winmidi.MidiOut()   # SysEx -> the keyboard itself
         self.profiles = []
         self.active_profile = None
+        self.fallback_profile = None
+        self.profile_callback = None    # told whenever active_profile changes
         self.armed = True
         self.passthrough = PASSTHRU_UNMAPPED
         self.auto_switch = True
@@ -195,7 +222,7 @@ class Engine:
         self.sysex_callback = None
         self._running = False
         self._threads = []
-        self._current_exe = ""
+        self._own_pid = os.getpid()
         self._held = {}
 
     # -- lifecycle ----------------------------------------------------------
@@ -377,24 +404,57 @@ class Engine:
 
     # -- profile switching --------------------------------------------------
 
-    def set_profiles(self, profiles, active=None):
+    def set_profiles(self, profiles):
+        """Install the profile list. Starts on the fallback, never on an
+        app-bound profile -- those wait for their app to take focus."""
         self.profiles = profiles
-        if active is not None:
-            self.active_profile = active
-        elif profiles and self.active_profile not in profiles:
-            self.active_profile = profiles[0]
+        self._check_fallback()
+        if self.active_profile not in profiles:
+            self._activate(self.fallback_profile, "")
+
+    def set_fallback(self, profile):
+        """The global profile to use whenever no app-bound profile applies.
+        App-bound profiles are ignored here: they are never live elsewhere."""
+        if profile is None or not profile.is_global:
+            return
+        self.fallback_profile = profile
+        if self.active_profile is None or self.active_profile.is_global:
+            self._activate(profile, "")
+
+    def _check_fallback(self):
+        # Editing a profile can add an app to it, or delete it outright.
+        fb = self.fallback_profile
+        if fb not in self.profiles or not fb.is_global:
+            self.fallback_profile = first_global(self.profiles)
+
+    def _activate(self, profile, exe):
+        if profile is self.active_profile:
+            return
+        self.active_profile = profile
+        name = profile.name if profile else "(none)"
+        self.log(f"Profile -> {name}" + (f" ({exe})" if exe else ""), "good")
+        if self.profile_callback:
+            self.profile_callback(profile)
+
+    def update_active(self):
+        """Point active_profile at whatever the focused app calls for."""
+        if not self.auto_switch:
+            return
+        pid, exe = winput.foreground_process()
+        # Our own window: leave things be, so clicking over here to edit a
+        # macro doesn't swap the profile out from under you.
+        if not exe or pid == self._own_pid:
+            return
+        profiles = list(self.profiles)
+        self._check_fallback()
+        self._activate(pick_profile(profiles, exe, self.fallback_profile), exe)
 
     def _watch_foreground(self):
         while self._running:
-            if self.auto_switch and self.profiles:
-                exe = winput.foreground_exe()
-                if exe and exe != self._current_exe:
-                    self._current_exe = exe
-                    for prof in self.profiles:
-                        if prof.matches_app(exe) and prof is not self.active_profile:
-                            self.active_profile = prof
-                            self.log(f"Profile -> {prof.name} ({exe})", "good")
-                            break
+            try:
+                self.update_active()
+            except Exception:
+                self.log(traceback.format_exc(limit=3), "error")
             time.sleep(0.4)
 
 

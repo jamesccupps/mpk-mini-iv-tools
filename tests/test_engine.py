@@ -175,5 +175,76 @@ class TestProfiles(unittest.TestCase):
                     self.assertFalse(m.get("enabled", True))
 
 
+def profile(name, match_app=""):
+    return eng.Profile({"name": name, "match_app": match_app, "mappings": []})
+
+
+class TestProfileSwitching(unittest.TestCase):
+    """App-bound profiles are live only while their app has focus."""
+
+    LIVE = "Ableton Live 12 Lite.exe"
+
+    def setUp(self):
+        # "Ableton" sorts first on disk -- it must still not start live.
+        self.daw = profile("Ableton Looper", self.LIVE)
+        self.mine = profile("My Macros")
+        self.other = profile("Other global")
+        self.engine = eng.Engine()
+        self.engine.set_profiles([self.daw, self.mine, self.other])
+        self._real = eng.winput.foreground_process
+        self.focus = (1234, "chrome.exe")
+        eng.winput.foreground_process = lambda: self.focus
+
+    def tearDown(self):
+        eng.winput.foreground_process = self._real
+
+    def focus_on(self, exe, pid=1234):
+        self.focus = (pid, exe)
+        self.engine.update_active()
+        return self.engine.active_profile
+
+    def test_starts_on_a_global_profile_not_the_first_file(self):
+        self.assertIs(self.engine.active_profile, self.mine)
+
+    def test_app_profile_goes_live_with_its_app(self):
+        self.assertIs(self.focus_on(self.LIVE), self.daw)
+
+    def test_and_stops_when_focus_leaves(self):
+        self.focus_on(self.LIVE)
+        self.assertIs(self.focus_on("chrome.exe"), self.mine)
+
+    def test_fallback_follows_the_users_pick(self):
+        self.engine.set_fallback(self.other)
+        self.focus_on(self.LIVE)
+        self.assertIs(self.focus_on("notepad.exe"), self.other)
+
+    def test_app_profile_cannot_become_the_fallback(self):
+        self.engine.set_fallback(self.daw)
+        self.assertIs(self.focus_on("chrome.exe"), self.mine)
+
+    def test_own_window_does_not_switch(self):
+        """Clicking into the app to edit must not swap the profile."""
+        self.focus_on(self.LIVE)
+        self.assertIs(self.focus_on("python.exe", pid=os.getpid()), self.daw)
+
+    def test_no_global_profile_means_nothing_live(self):
+        self.engine.set_profiles([self.daw])
+        self.assertIsNone(self.focus_on("chrome.exe"))
+        self.assertIs(self.focus_on(self.LIVE), self.daw)
+
+    def test_giving_the_fallback_an_app_retires_it(self):
+        self.mine.match_app = "notepad.exe"
+        self.engine.set_profiles(self.engine.profiles)
+        self.assertIs(self.focus_on("chrome.exe"), self.other)
+
+    def test_callback_reports_changes(self):
+        seen = []
+        self.engine.profile_callback = seen.append
+        self.focus_on(self.LIVE)
+        self.focus_on(self.LIVE)                    # no change, no call
+        self.focus_on("chrome.exe")
+        self.assertEqual(seen, [self.daw, self.mine])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

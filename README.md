@@ -72,8 +72,11 @@ drawing re-bases itself automatically when you use OCT − / OCT +.
 
 Chain several actions into one macro; they run in order.
 
-**Profiles** switch automatically by focused app — put `Ableton Live 12
-Suite.exe` in the auto-switch box and that profile follows your focus.
+**Profiles** follow the focused app. Put `Ableton Live 12 Suite.exe` in the
+auto-switch box and that profile is live *only* while Live has focus. Alt-tab
+to a browser and its shortcuts stop. A profile with the box left blank is
+global: the one you last selected applies everywhere else. The status bar shows
+which profile is live.
 
 **MIDI Monitor** shows exactly what the keyboard sends, so you never have to
 guess a pad number.

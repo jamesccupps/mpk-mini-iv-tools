@@ -191,23 +191,28 @@ user32.GetForegroundWindow.restype = wintypes.HWND
 kernel32.OpenProcess.restype = wintypes.HANDLE
 
 
-def foreground_exe():
-    """Filename of the executable owning the focused window ('' on failure)."""
+def foreground_process():
+    """(pid, exe filename) owning the focused window; (0, '') on failure."""
     hwnd = user32.GetForegroundWindow()
     if not hwnd:
-        return ""
+        return 0, ""
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     if not pid.value:
-        return ""
+        return 0, ""
     handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
     if not handle:
-        return ""
+        return pid.value, ""
     try:
         size = wintypes.DWORD(1024)
         buf = ctypes.create_unicode_buffer(size.value)
         if kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
-            return os.path.basename(buf.value)
+            return pid.value, os.path.basename(buf.value)
     finally:
         kernel32.CloseHandle(handle)
-    return ""
+    return pid.value, ""
+
+
+def foreground_exe():
+    """Filename of the executable owning the focused window ('' on failure)."""
+    return foreground_process()[1]
