@@ -264,6 +264,8 @@ class MappingDialog(tk.Toplevel):
         root.columnconfigure(1, weight=1)
         root.rowconfigure(3, weight=1)
         self._refresh_actions()
+        self._learning = False
+        self.bind("<Destroy>", self._on_destroy)
         _center(self, parent)
         self.grab_set()
 
@@ -271,15 +273,27 @@ class MappingDialog(tk.Toplevel):
     def _chan_label(ch):
         return "Any" if ch in (-1, None) else str(ch + 1)
 
+    def _on_destroy(self, event):
+        # <Destroy> fires for every child too; act once, for the dialog.
+        # A learn left armed would eat the next pad hit -- no macro, no
+        # passthrough -- and hand it to a dialog that no longer exists.
+        if event.widget is self and self._learning:
+            self._learning = False
+            self.app.cancel_learn(self._learned)
+
     def _learn(self):
         if not self.app.engine.midi_in.is_open:
             messagebox.showwarning("Not connected",
                                    "Connect to the keyboard first.", parent=self)
             return
         self.learn_btn.config(text="Hit a pad/key...")
+        self._learning = True
         self.app.start_learn(self._learned)
 
     def _learned(self, status, d1, d2):
+        self._learning = False
+        if not self.winfo_exists():         # closed while the hit was queued
+            return
         kind = eng._kind_of(status, d2) or "note_on"
         self.t_type.set(kind)
         self.t_chan.set(str((status & 0x0F) + 1))
@@ -781,7 +795,14 @@ class App(tk.Tk):
     def start_learn(self, callback):
         def wrapped(status, d1, d2):
             self.ui_queue.put(("learn", (callback, status, d1, d2)))
+        wrapped.target = callback
         self.engine.learn_callback = wrapped
+
+    def cancel_learn(self, callback):
+        """Disarm a pending learn, if it is still the one `callback` started."""
+        pending = self.engine.learn_callback
+        if pending is not None and getattr(pending, "target", None) == callback:
+            self.engine.learn_callback = None
 
     def _read_preset(self):
         """Ask the keyboard for the preset it currently has loaded."""
