@@ -3,13 +3,16 @@
 WARNING -- requesting a slot appears to make the keyboard LOAD it. Sweeping
 every slot therefore leaves the unit sitting on the last one read (USER11),
 with that preset's pad assignments and pad colours. This was observed on real
-hardware. So by default this reads only the current preset; pass --all to
-sweep every slot, and reload the preset you want afterwards with
+hardware. So by default this reads only slot 0; pass --all to sweep every
+slot, and reload the preset you want afterwards with
 SHIFT + PLUGIN/DAW -> USER PRESETS.
+
+Slot 0 may be the current buffer or an alias for slot 1 -- unresolved, see
+PROTOCOL.md U1. Don't read it as "whatever is loaded" until that is settled.
 
 It still only ever sends the dump-*request* opcode; it never writes.
 
-    py -3 dump_presets.py            # current preset only
+    py -3 dump_presets.py            # slot 0 only
     py -3 dump_presets.py --all      # every slot (changes what is loaded)
     py -3 dump_presets.py --json     # machine readable
     py -3 dump_presets.py --raw      # hex, for protocol work

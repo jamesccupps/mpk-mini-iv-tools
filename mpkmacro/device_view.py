@@ -5,9 +5,10 @@ two rows of four (1-4 on the bottom row, 5-8 above), the display/encoder and
 SHIFT / PLUGIN-DAW in the middle, 8 knobs in two rows of four on the right,
 the button strip below, and 25 keys along the bottom.
 
-Labels come from the preset actually loaded on the keyboard, and highlights
-come from real incoming MIDI, so the thing that lights up is the thing you
-touched.
+Labels come from a preset dump read off the keyboard, and highlights come
+from real incoming MIDI, so the thing that lights up is the thing you touched.
+(The dump is of slot 0, which may alias slot 1 rather than the loaded preset --
+PROTOCOL.md U1.)
 """
 from __future__ import annotations
 

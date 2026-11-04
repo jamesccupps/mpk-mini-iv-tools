@@ -1,6 +1,8 @@
 """MPK mini IV preset SysEx format.
 
-Worked out by probing a real MPK mini IV. Confirmed so far:
+Worked out by probing a real MPK mini IV. PROTOCOL.md is the reference: it
+tags every field with how it was established and lists what is still open.
+In brief:
 
     request  F0 47 <dev> 5D 66 00 01 <preset> F7
     reply    F0 47 <dev> 5D 67 <lenMSB> <lenLSB> <payload> F7
@@ -19,7 +21,7 @@ Payload layout (offsets are relative to the start of the payload):
     110..269 8 knob records, 20 bytes each
     270..275 6 byte tail
 
-Fields still marked unknown are left as raw numbers rather than guessed at.
+Fields not yet identified are kept as raw numbers rather than guessed at.
 """
 from __future__ import annotations
 
@@ -78,9 +80,9 @@ class Preset:
 
         g = p[1 + NAME_LEN:1 + NAME_LEN + GLOBAL_LEN]
         self.globals_raw = list(g)
-        # Byte 3 of this block reads 0x78 (120) on a factory preset, which is
-        # almost certainly the arpeggiator/sequencer tempo. The rest are not
-        # identified yet, so they are kept verbatim and written back unchanged.
+        # Byte 3 reads 0x78 (120) on the factory preset: probably the tempo,
+        # though never varied to prove it (PROTOCOL.md U6). The rest are
+        # unidentified (U7) and kept verbatim in globals_raw.
         self.tempo = g[3] if len(g) > 3 else None
 
         off = 1 + NAME_LEN + GLOBAL_LEN
@@ -105,7 +107,7 @@ class Preset:
                 "cc": rec[0],
                 "min": rec[1],
                 "max": rec[2],
-                "mode": rec[3],          # 0/1 seen; absolute vs relative
+                "mode": rec[3],          # 0 and 1 seen; meaning unconfirmed (U9)
                 "name": _text(rec[4:20]),
             })
 

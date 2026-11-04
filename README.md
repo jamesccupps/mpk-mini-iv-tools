@@ -1,62 +1,68 @@
 # MPK Macro Studio
 
-Turns an **Akai MPK mini IV** into a macro controller for Windows, and talks to
-the keyboard's own preset memory over SysEx.
+Turns an **Akai MPK mini IV** into a macro controller for Windows, and reads
+the keyboard's own presets over SysEx, using a protocol reverse-engineered for
+this project and documented in [PROTOCOL.md](PROTOCOL.md).
 
-Pure standard-library Python — no `pip install`, no dependencies.
+Pure standard-library Python: no `pip install`, no dependencies.
 
 ```bash
 "MPK Macro Studio.bat"
 ```
 
-**Requirements:** Windows, Python 3.8+. Nothing else. It uses `winmm` and
-`SendInput` through `ctypes`, and Tkinter for the UI.
+**Requirements:** Windows and Python 3.10+. Nothing else. It uses `winmm` and
+`SendInput` through `ctypes`, with Tkinter for the UI.
 
 ![The Device tab](docs/device-tab.png)
 
-*The panel lights up as you play it. Pad 3A has just been hit; knobs 1 and 3
-show their values. Every label is read off the preset actually loaded on the
-keyboard, so the numbers are never a guess.*
+*The panel lights up as you play it. Pad 3A has just been hit, and knobs 1 and
+3 show their values. The pad and knob labels come from a preset dump read off
+the keyboard.*
 
 > [!WARNING]
-> The SysEx tools here talk to real hardware over a protocol that was
-> reverse-engineered, not documented. Two behaviours to know before you run
+> The SysEx tools talk to real hardware over a protocol that was
+> reverse-engineered, not documented. Two things to know before you run
 > anything:
 >
 > - **Requesting a preset appears to make the keyboard load it.** Sweeping every
 >   slot leaves the unit on the last one read, with different pad assignments
->   and colours. Recovery is SHIFT + PLUGIN/DAW → encoder → your preset.
+>   and colours. To recover: SHIFT + PLUGIN/DAW → encoder → your preset.
 > - **Never send a guessed opcode.** An early version of `re_probe.py` swept an
 >   invented opcode and changed device state. Everything here now sends only
 >   opcodes confirmed against hardware.
 >
-> Nothing here writes to the keyboard's memory, and SysEx cannot damage the
-> device — but it can change settings you then have to put back.
+> Nothing here writes to the keyboard's memory, and SysEx can't damage the
+> device. It can change settings you then have to put back.
 
-Unofficial and unaffiliated with Akai Professional or inMusic. Findings come
-from probing one MPK mini IV (firmware 1.41). Use at your own risk.
+Unofficial and unaffiliated with Akai Professional or inMusic. The findings
+come from probing one MPK mini IV (firmware 1.41). Use at your own risk.
 
 ## Why this exists
 
 The mini IV edits itself. Hold **SHIFT + PROG EDIT** on the keyboard and you can
 change any pad's note, any knob's CC, MIDI channels, ranges and curves, then
-save to one of 11 user preset slots. Akai's old "MPK mini Editor" for Windows
-does **not** support this model, and it doesn't need to.
+save to one of 11 user preset slots. Akai's older "MPK mini Editor" for Windows
+does **not** support this model.
 
-What the keyboard cannot do is press keys on your computer. That is what this
-adds — plus a way to read its presets from the PC.
+What the keyboard can't do is press keys on your computer. That is what this
+adds, plus a way to read its presets from the PC.
 
 ## What it does
 
-**Device tab — a live picture of the keyboard.** Pads, knobs, wheels, keys and
-the button strip, laid out like the real panel. Touch anything and it lights up,
-with the exact note or CC it just sent shown underneath. Every label is read off
-the preset that is *actually loaded* on your unit, so pad and knob numbers are
-never a guess. Click any control to build a macro for it.
+**Device tab: a live picture of the keyboard.** Pads, knobs, wheels, keys and
+the button strip are laid out like the real panel. Touch anything and it lights
+up, with the note or CC it just sent shown underneath. **Read preset from
+keyboard** labels each pad and knob from a preset dump. Click any control to
+build a macro for it.
+
+Highlights always come from the MIDI the keyboard actually sends. The labels
+come from the dump. "Read preset" asks for slot 0, which may alias slot 1 rather
+than the loaded preset, and may switch the unit to it (open questions U1/U2 in
+[PROTOCOL.md](PROTOCOL.md#unknowns-register)).
 
 Pads and keys can share note numbers, so the view uses the pad MIDI channel from
-the preset (channel 10 on the factory presets) to tell them apart. The keyboard
-drawing re-bases itself automatically when you use OCT − / OCT +.
+the preset to tell them apart (channel 10 on the factory presets). The keyboard
+drawing re-bases itself when you use OCT − / OCT +.
 
 **Macros.** Any pad, key or knob can fire:
 
@@ -66,11 +72,11 @@ drawing re-bases itself automatically when you use OCT − / OCT +.
 | `text` | Types a block of text |
 | `run` | Launches a program or file |
 | `wait` | Pauses between steps |
-| `chord` | Plays a chord out a MIDI port, with optional strum |
-| `cc` | Sends a CC — set value to `passthru` for **macro knobs** |
-| `note` / `program` | Single note or program change |
+| `chord` | Plays a chord out of a MIDI port, with optional strum |
+| `cc` | Sends a CC. Set the value to `passthru` for **macro knobs** |
+| `note` / `program` | A single note, or a program change |
 
-Chain several actions into one macro; they run in order.
+Chain several actions into one macro and they run in order.
 
 **Profiles** follow the focused app. Put `Ableton Live 12 Suite.exe` in the
 auto-switch box and that profile is live *only* while Live has focus. Alt-tab
@@ -81,15 +87,16 @@ which profile is live.
 **MIDI Monitor** shows exactly what the keyboard sends, so you never have to
 guess a pad number.
 
-**SysEx Lab** sends raw SysEx and shows replies — this is where the protocol
-below was worked out.
+**SysEx Lab** sends raw SysEx and decodes the replies. This is where the
+protocol was worked out.
 
 ## Setup
 
-1. Run `MPK Macro Studio.bat`. It finds the keyboard and reads its preset.
-2. On the **Device** tab, press the pad or turn the knob you want to use — it
-   lights up so you know you've got the right one.
-3. Click it, add an action, Save.
+1. Run `MPK Macro Studio.bat`. It finds the keyboard and connects. Connecting
+   sends nothing to the keyboard.
+2. On the **Device** tab, press the pad or turn the knob you want to use. It
+   lights up, so you know you've got the right one.
+3. Click it, add an action, and Save.
 4. Focus your DAW and hit the pad.
 
 Both included profiles ship with every macro **disabled**, so nothing surprises
@@ -97,237 +104,106 @@ you. Tick "Enable / disable" on the ones you want.
 
 ### Worked example: a one-button looper for Ableton
 
-`profiles/Ableton Looper.json` turns the top four keys into Live commands —
-Duplicate, Quantize, Undo, New MIDI track — so a whole layered take can be
+`profiles/Ableton Looper.json` turns the top four keys into Live commands
+(Duplicate, Quantize, Undo, New MIDI track), so a whole layered take can be
 built without touching the computer.
 
-**Capture MIDI is deliberately not in there.** Live 12 removed its keyboard
-shortcut, and `Ctrl+Shift+C` is "Copy Time" in Live 12, so sending that fires
-the wrong command. MIDI-map the Capture button instead: enable **Remote** on
-the keyboard's input port, press **Ctrl+M**, click the Capture button, press a
-pad, then **Ctrl+M** again. Mapping the control directly beats driving it
-through a keystroke, and it survives the DAW rearranging its shortcuts.
+Capture MIDI is deliberately left out, because Live 12 removed its shortcut.
+See [docs/ableton.md](docs/ableton.md#capture-midi) for MIDI-mapping it instead.
 
 It uses the **top keys rather than pads** on purpose. A macro on a pad still
-plays its drum sound, because the DAW hears the keyboard directly and
-"swallow" only governs this app's own passthrough. Notes above 51 fall outside
-a Drum Rack's sample range, so they are silent while still firing the macro.
-Route the DAW through loopMIDI instead if you want macro *pads* that make no
-sound.
+plays its drum sound, because the DAW hears the keyboard directly; "swallow"
+only governs this app's own passthrough. Notes above 51 fall outside a Drum
+Rack's sample range, so they stay silent while still firing the macro. If you
+want macro *pads* that make no sound, route the DAW through loopMIDI instead.
 
 The four macros ship disabled. Pick **Ableton Looper** on the Macros tab and
 enable them. The profile auto-activates when any Live 12 edition (Lite, Intro,
-Standard or Suite) has focus. For anything else, focus the app and use **Use
+Standard or Suite) has focus. For other apps, focus the app and use **Use
 focused app** to fill in its exact `.exe` name.
 
 ### Playing notes *and* running macros at once
 
 A macro that swallows its message stops it reaching the DAW, and `chord`/`cc`
-actions need somewhere to send notes. Both are solved by a virtual MIDI cable:
+actions need somewhere to send notes. A virtual MIDI cable solves both:
 
 1. Install **loopMIDI** (free, Tobias Erichsen) and create a port.
-2. Set **Send MIDI to** = that port.
+2. Set **Send MIDI to** to that port.
 3. Point your DAW at the loopMIDI port instead of the MPK directly.
 
-Without it, macros still work fine — keystrokes need no MIDI routing at all.
+Without it, macros still work: keystrokes need no MIDI routing at all.
 
-## Ableton Live setup (Live 12, Windows)
+### Sharing profiles
 
-Live ships an `MPK_mini_IV` control surface script, so nothing needs
-installing. On the keyboard, DAW mode is not self-sustaining: the device boots
-into it and drops back to MIDI within about a second unless Live keeps talking
-to it. **DAW for a second, then MIDI** therefore means the handshake started
-and the return path failed — almost always the Control Surface *Output*.
+A profile is a JSON file in `profiles/`. A `run` action launches whatever it
+names, so treat a profile from someone else like a script, and read it before
+you enable it.
 
-Settings → **Tempo & MIDI**:
+## Ableton Live
 
-| Setting | Value |
-|---|---|
-| Control Surface 1 | MPK mini IV |
-| Input | the port Live renames **`MPK_mini_IV Input`** |
-| Output | the port Live renames **`MPK_mini_IV Output`** |
+Port setup for Live's bundled `MPK_mini_IV` script, DAW mode that drops back to
+MIDI, and latency and silent-output fixes are in
+[docs/ableton.md](docs/ableton.md).
 
-Live renames whichever port the script has claimed, which is how you identify
-the DAW port — it is port 2, not port 1. Watch out: the keyboard exposes
-**five MIDI outputs but only four inputs**, so the output list is offset from
-the input list and the Output dropdown is easy to set one row off.
+## The protocol
 
-Input Ports table:
-
-| Port | Track | Sync | Remote | MPE |
-|---|---|---|---|---|
-| MPK mini IV | on | – | – | – |
-| MPK_mini_IV Input (port 2) | on | on | – | – |
-| MPK mini IV (Port 3) | **off** | – | – | – |
-| MPK mini IV (Port 4) | **off** | – | – | – |
-
-Ports 3 and 4 must be off or the Studio Instrument Collection plugin
-misbehaves. Leave **Remote off** — the script does the mapping, and Remote on
-top of it double-maps. Leave **MPE off**.
-
-If the hardware still will not sit in DAW mode, load the DAW preset by hand:
-**SHIFT + PLUGIN/DAW** → USER PRESETS → encoder to **DAW** → press the encoder.
-DAW is preset slot 1.
-
-### Audio latency
-
-If playing feels laggy, check **Preferences → Audio → Overall Latency** before
-changing anything else. Live's MME/DirectX fallback defaults to a **4096 sample**
-output buffer, which is ~93 ms. Dragging that to 1024 gives ~23 ms and 512 gives
-~12 ms, with no driver change and nothing to install. Step back up one if you
-hear crackling.
-
-ASIO4ALL can go lower, but note that Realtek exposes several endpoints. Enabling
-"Realtek(R) Audio" as a whole can drive the *wrong* jack and produce total
-silence while Live's meters still move. Use the gear icon → Advanced Options and
-enable the specific output your speakers are plugged into. `audio_test.py` plays
-a tone through every Windows output in turn so you can identify which is which:
-
-```bash
-py -3 audio_test.py --list     # list outputs
-py -3 audio_test.py            # tone through each in turn
-```
-
-Silence with meters moving has two usual causes: no active stereo pair under
-**Output Config**, or ASIO holding a device another app (Discord, Chrome, Steam)
-already owns.
-
-## The MPK mini IV SysEx protocol
-
-Reverse-engineered from a real unit; every field below is confirmed against
-hardware unless marked otherwise.
-
-The universal identity request `F0 7E 7F 06 01 F7` returns:
-
-```
-F0 7E 7F 06 02 47 5D 00 19 00 01 04 01 00 00 00 00 00 <serial ASCII> 00 F7
-            ^^ ^^
-            |  product ID 0x5D = MPK mini IV
-            Akai
-```
-
-That `5D` is the key — it slots into Akai's existing MPK mini scheme
-(`0x26` = mk2, `0x49` = mk3):
-
-```
-request   F0 47 <dev> 5D 66 00 01 <preset> F7
-reply     F0 47 <dev> 5D 67 <lenMSB> <lenLSB> <payload> F7
-```
-
-`<dev>` may be `00` or `7F`; both answer. `<preset>` is `0` for the current
-buffer and `1`–`13` for the slots. Length is 14 bits over two 7-bit bytes,
-`(MSB << 7) | LSB` = **276**, giving a 284-byte message.
-
-Payload layout:
-
-| Offset | Size | Contents |
-|---|---|---|
-| 0 | 1 | Preset number |
-| 1 | 16 | Name, ASCII, NUL padded |
-| 17 | 13 | Global settings — byte 3 is `0x78` (120), almost certainly tempo; rest not yet identified |
-| 30 | 80 | 16 pad records, 5 bytes each |
-| 110 | 160 | 8 knob records, 20 bytes each |
-| 270 | 6 | Tail, `00 00 01 00 01 00` on factory presets |
-
-Pad record (5 bytes): `note`, `cc`, `program`, then 2 bytes not yet identified.
-Knob record (20 bytes): `cc`, `min`, `max`, `mode`, then a 16-byte ASCII name.
-
-Factory defaults read back as pads = notes 36–51 / CC 32–47 / PC 0–15, and
-knobs = CC 24–31 named `KNOB1`–`KNOB8`.
-
-### The message envelope
-
-Every message seen from this device, in either direction, has the same shape:
-
-```
-F0 47 <dev> 5D <opcode> <lenMSB> <lenLSB> <payload...> F7
-```
-
-`<dev>` is `00` or `7F` (both are answered). Length is 14 bits split over two
-7-bit bytes: `(MSB << 7) | LSB`. Confirmed against four opcodes — `0x19`,
-`0x2A`, `0x66` and `0x67` — so `mpk_preset.parse_frame()` unwraps any of them
-and `decode_message()` puts the known ones into words.
-
-### Messages the keyboard sends unprompted
-
-Captured live while operating the hardware:
-
-| Message | Meaning |
-|---|---|
-| `F0 47 00 5D 2A 00 01 <mode> F7` | pad mode changed. `00` = Notes, `02` = CC#. Confirmed: right after mode `00` the pads began sending `Note On` on ch10, and while in `02` they sent CC 34/35 (pads use CC 32-47). |
-| `F0 47 00 5D 19 00 00 F7` | status, emitted on connect |
-| `F0 47 00 5D 19 00 11 02 ...` | longer status, emitted on connect |
-
-Whether sending `0x2A` *to* the device sets the pad mode is **untested**. Don't
-assume it does — see the warning below.
-
-### Danger: requesting a preset appears to load it
-
-Observed on hardware: sweeping slots 0-13 with the dump-request opcode left the
-unit sitting on the last slot read, with that preset's pad assignments and pad
-colours, and knocked it out of DAW mode. Recovery is
-**SHIFT + PLUGIN/DAW -> encoder to DAW -> press encoder**.
-
-So reads are not as side-effect-free as the opcode name suggests. `dump_presets.py`
-therefore reads only the current preset unless you pass `--all`.
-
-Two rules learned the hard way:
-
-- **Never send a guessed opcode to hardware.** An earlier version of
-  `re_probe.py` swept an invented `0x60`; that has been removed.
-- **Connecting should never transmit.** The app no longer auto-requests a
-  preset dump when it opens.
+[PROTOCOL.md](PROTOCOL.md) is the reference. It covers the identity reply,
+product ID `0x5D`, the Akai message envelope, the opcodes seen so far, and the
+276-byte preset layout down to the pad and knob records. Each finding is tagged
+by how it was established: captured bytes, live observation, both, or
+inference. An unknowns register lists what is still open, each item with the
+test that would settle it. If you have one of these keyboards, that list is
+the place to start.
 
 ### Tools
 
 ```bash
-py -3 dump_presets.py          # the current preset, plain English
-py -3 dump_presets.py --all    # every slot (changes what is loaded, see above)
+py -3 dump_presets.py          # slot 0, in plain English
+py -3 dump_presets.py --all    # every slot (changes what is loaded)
 py -3 dump_presets.py --json   # machine readable
 py -3 dump_presets.py --raw    # hex
 py -3 device_info.py           # firmware version and serial number
-py -3 re_probe.py              # protocol reconnaissance
-py -3 port_scout.py            # which of the four USB ports carries what
+py -3 re_probe.py              # identity + dump requests on every port
+py -3 port_scout.py            # which USB MIDI port carries what
 py -3 button_map.py            # guided: what each button and the encoder send
 py -3 audio_test.py --list     # unrelated to MIDI; identifies audio outputs
 ```
 
-All of these are **read-only**. Nothing here writes to the keyboard's memory.
+None of these writes to the keyboard's memory. The ones that request presets
+(`dump_presets.py`, `re_probe.py`) may change which preset is *loaded*.
 
-`button_map.py` is worth a mention: the preset dump covers pads and knobs but
-says nothing about the buttons, so what ARP, LATCH, NOTE REPEAT, TAP TEMPO,
-UNDO, LOOP, transport and the encoder transmit is undocumented. That script
-walks you through them one at a time and writes a labelled `button_map.json`.
-Run it once in DAW mode and once in MIDI mode — the DAW script swallows some
-buttons, and which ones is itself worth knowing.
-
-### Not done yet: writing presets back
-
-Reading is solved. Writing needs the store opcode, which on the mk2/mk3 is
-`0x64` — untested here, because a wrong guess overwrites a preset slot. Test it
-on a slot you don't care about, and read it back to confirm.
+`button_map.py` walks you through the controls one at a time and writes
+`button_map.json`. The preset dump covers the pads and knobs but not the buttons,
+so what ARP, LATCH, NOTE REPEAT, TAP TEMPO, UNDO, LOOP, transport and the encoder
+send is still unrecorded (U16). Run it once in DAW mode and once in MIDI mode:
+the DAW script swallows some buttons, and which ones is worth knowing. `--only
+LATCH ARP` redoes single controls.
 
 ## Layout
 
 ```
 main.py                 launcher
 MPK Macro Studio.bat    double-click this
+PROTOCOL.md             the SysEx protocol, with evidence and open questions
+docs/ableton.md         Live setup, latency, audio troubleshooting
 dump_presets.py         read presets from the keyboard
 device_info.py          firmware version and serial
 re_probe.py             SysEx reconnaissance
-port_scout.py           identify the four USB MIDI ports
+port_scout.py           identify the USB MIDI ports
 button_map.py           guided button/encoder mapper
 audio_test.py           tone through each Windows audio output
 profiles/*.json         your macros, one file per profile
-settings.json           last used ports (not committed)
+settings.json           last-used ports (not committed)
+mpk-macro-studio.log    runtime log (not committed)
 mpkmacro/
   winmidi.py            MIDI in/out + SysEx via winmm
   winput.py             SendInput keystrokes, foreground app
-  engine.py             matching and action execution
+  engine.py             profiles, matching and action execution
   gui.py                Tkinter UI
   device_view.py        the live panel drawing
   mpk_preset.py         preset format and message decoding
-tests/                  79 tests, no hardware required
+  applog.py             log file setup
+tests/                  no hardware required
 ```
 
 ## Tests
@@ -336,17 +212,20 @@ tests/                  79 tests, no hardware required
 py -3 -m unittest discover -s tests -t .
 ```
 
-79 tests, no keyboard needed. They run against `tests/fixtures.py`, which holds
-real SysEx captured from hardware — an actual 284-byte preset dump, the identity
-reply, both pad-mode messages and both status messages. So the parser is
-verified against what the device genuinely sends rather than against examples
-written to match the parser.
-
-The serial number in the identity fixture is zeroed.
+No keyboard is needed, and CI runs the suite on Windows. The protocol tests use
+`tests/fixtures.py`, which holds real SysEx captured from hardware: a 284-byte
+preset dump, the identity reply, both pad-mode messages and both status
+messages. So the parser is checked against what the device actually sends,
+not against examples written to match the parser. The serial number in the
+identity fixture is zeroed.
 
 ## Notes
 
-- Windows only — it uses `winmm` and `SendInput` directly.
-- Keystrokes go to whatever window has focus, exactly as if typed.
+- Windows only: it uses `winmm` and `SendInput` directly.
+- Keystrokes go to whatever window has focus, exactly as if typed. Windows
+  blocks them from reaching apps running as administrator unless this app is
+  elevated too.
+- If something goes wrong, `mpk-macro-studio.log` next to `main.py` has the
+  details. The launcher uses `pythonw`, so there is no console.
 - MIDI callbacks do the minimum on the system thread and hand off to a worker,
   which is why SysEx dumps arrive intact.

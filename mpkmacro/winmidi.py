@@ -1,6 +1,6 @@
 """MIDI input/output on Windows via winmm + ctypes.
 
-No third-party packages. Works on any stock Python 3.8+ on Windows.
+No third-party packages. Works on any stock Python 3.10+ on Windows.
 Handles short messages (notes/CC/PC) and SysEx in both directions -- SysEx is
 what a hardware editor is built on, so it is first-class here.
 """

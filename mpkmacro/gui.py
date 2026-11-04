@@ -534,8 +534,11 @@ class App(tk.Tk):
         nb.add(sx, text="SysEx Lab")
         ttk.Label(
             sx,
-            text="Talk to the keyboard directly. Product ID 0x5D = MPK mini IV.\n"
-                 "Read a preset:  F0 47 00 5D 66 00 01 <preset 00-0D> F7",
+            text="Talk to the keyboard directly. Product ID 0x5D = MPK mini IV. "
+                 "See PROTOCOL.md.\n"
+                 "Read a preset:  F0 47 00 5D 66 00 01 <slot 00-0D> F7   "
+                 "(the keyboard appears to LOAD the slot you read)\n"
+                 "Never send an opcode you have guessed.",
             justify="left",
         ).pack(anchor="w")
         erow = ttk.Frame(sx)
@@ -805,7 +808,12 @@ class App(tk.Tk):
             self.engine.learn_callback = None
 
     def _read_preset(self):
-        """Ask the keyboard for the preset it currently has loaded."""
+        """Ask the keyboard for slot 0.
+
+        Slot 0 may be the current buffer or an alias for slot 1, and asking
+        may make the unit load it (PROTOCOL.md U1, U2). It is still the least
+        disruptive request available.
+        """
         if not self.engine.device_out.is_open:
             messagebox.showwarning(
                 "Keyboard not connected",
