@@ -89,8 +89,8 @@ below was worked out.
 3. Click it, add an action, Save.
 4. Focus your DAW and hit the pad.
 
-The included profile has six example macros. They ship **disabled** so nothing
-surprises you — tick "Enable / disable" on the ones you want.
+Both included profiles ship with every macro **disabled**, so nothing surprises
+you. Tick "Enable / disable" on the ones you want.
 
 ### Worked example: a one-button looper for Ableton
 
@@ -112,7 +112,10 @@ a Drum Rack's sample range, so they are silent while still firing the macro.
 Route the DAW through loopMIDI instead if you want macro *pads* that make no
 sound.
 
-This profile auto-activates when Ableton has focus.
+The four macros ship disabled. Pick **Ableton Looper** on the Macros tab and
+enable them. The profile auto-activates when any Live 12 edition (Lite, Intro,
+Standard or Suite) has focus. For anything else, focus the app and use **Use
+focused app** to fill in its exact `.exe` name.
 
 ### Playing notes *and* running macros at once
 

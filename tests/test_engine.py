@@ -162,6 +162,18 @@ class TestProfiles(unittest.TestCase):
     def test_new_ids_are_unique(self):
         self.assertEqual(len({eng.new_id() for _ in range(500)}), 500)
 
+    # Locally, profiles/ holds the user's own macros, which they are free to
+    # enable. Only a clean checkout (CI) shows what actually ships.
+    @unittest.skipUnless(os.environ.get("CI"), "checks a clean checkout only")
+    def test_shipped_profiles_fire_nothing(self):
+        """A fresh install must not press keys until the user opts in."""
+        shipped = sorted(eng.PROFILE_DIR.glob("*.json"))
+        self.assertTrue(shipped)
+        for path in shipped:
+            for m in eng.Profile.load(path).mappings:
+                with self.subTest(profile=path.name, macro=m.get("name")):
+                    self.assertFalse(m.get("enabled", True))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
