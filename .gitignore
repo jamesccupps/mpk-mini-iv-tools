@@ -11,3 +11,6 @@ sysex-log*.txt
 # Runtime log (see mpkmacro/applog.py).
 *.log
 *.log.[0-9]*
+
+# Output of button_map.py: one unit, one run. Summarise findings in the docs.
+button_map.json

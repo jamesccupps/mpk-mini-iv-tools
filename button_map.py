@@ -90,14 +90,55 @@ def describe(kind, payload):
     return winmidi.describe(*payload)
 
 
+def _group(kind, payload):
+    """(what makes two messages 'the same control', the value that varies).
+
+    Grouping on the raw message rather than its display text: the text-based
+    version split on the word "value", which pitchbend lines don't contain,
+    so one wheel move came out as hundreds of lines.
+    """
+    if kind == "sysex":
+        return ("sysex", tuple(payload)), None
+    status, d1, d2 = payload
+    kind_nibble, ch = status >> 4, status & 0x0F
+    if kind_nibble == winmidi.PITCH:
+        return (status,), ((d2 << 7) | d1) - 8192
+    if kind_nibble == winmidi.CHAN_AT:
+        return (status,), d1
+    if kind_nibble == winmidi.PC:
+        return (status, d1), None
+    if kind_nibble == winmidi.NOTE_ON and d2 == 0:      # note off in disguise
+        return (0x80 | ch, d1), 0
+    return (status, d1), d2
+
+
 def summarise(events):
-    """Collapse a burst into something readable, keeping order."""
-    seen, out = set(), []
-    for port, text in events:
-        key = (port, text.split("value")[0])
-        if key not in seen:
-            seen.add(key)
-            out.append(f"[{port}] {text}")
+    """Collapse a burst to one line per control, keeping first-seen order.
+
+    events: (port, kind, payload) as drained from MidiIn. A control that sent
+    many messages gets a count and the range its value covered.
+    """
+    groups, order = {}, []
+    for port, kind, payload in events:
+        key, value = _group(kind, payload)
+        key = (port,) + key
+        g = groups.get(key)
+        if g is None:
+            g = groups[key] = {"text": f"[{port}] {describe(kind, payload)}",
+                               "n": 0, "lo": value, "hi": value}
+            order.append(key)
+        g["n"] += 1
+        if value is not None:
+            g["lo"], g["hi"] = min(g["lo"], value), max(g["hi"], value)
+    out = []
+    for key in order:
+        g = groups[key]
+        line = g["text"]
+        if g["n"] > 1:
+            line += f"   x{g['n']}"
+            if g["lo"] != g["hi"]:
+                line += f", range {g['lo']}..{g['hi']}"
+        out.append(line)
     return out
 
 
@@ -176,7 +217,7 @@ def main(argv):
                     kind, payload = mi.queue.get_nowait()
                 except Exception:
                     break
-                got.append((port, describe(kind, payload)))
+                got.append((port, kind, payload))
         return got
 
     try:
