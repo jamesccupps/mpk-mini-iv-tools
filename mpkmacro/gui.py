@@ -204,7 +204,8 @@ class MappingDialog(tk.Toplevel):
         t = self.mapping["trigger"]
         self.t_type = tk.StringVar(value=t.get("type", "note_on"))
         self.t_chan = tk.StringVar(value=self._chan_label(t.get("channel", -1)))
-        self.t_num = tk.StringVar(value=str(t.get("number", 36)))
+        num = t.get("number", 36)
+        self.t_num = tk.StringVar(value="" if num in (None, -1) else str(num))
         self.t_val = tk.StringVar(
             value="" if t.get("value") in (None, "", -1) else str(t.get("value"))
         )
@@ -219,6 +220,9 @@ class MappingDialog(tk.Toplevel):
         )
         ttk.Label(trig, text="Note / CC #").grid(row=1, column=0, sticky="w",
                                                  pady=(6, 0))
+        ttk.Label(trig, text="Leave either box blank to match any.",
+                  foreground="#666").grid(row=3, column=0, columnspan=5,
+                                          sticky="w")
         ttk.Entry(trig, textvariable=self.t_num, width=8).grid(
             row=1, column=1, sticky="w", padx=4, pady=(6, 0)
         )
@@ -322,11 +326,12 @@ class MappingDialog(tk.Toplevel):
 
     def _ok(self):
         try:
-            number = int(self.t_num.get())
-        except ValueError:
-            number = -1
+            number, value = eng.parse_trigger_fields(
+                self.t_type.get(), self.t_num.get(), self.t_val.get())
+        except ValueError as exc:
+            messagebox.showerror("Check the trigger", str(exc), parent=self)
+            return
         chan = self.t_chan.get()
-        raw_val = self.t_val.get().strip()
         self.mapping.update({
             "name": self.name.get().strip() or "Untitled",
             "enabled": self.enabled.get(),
@@ -335,7 +340,7 @@ class MappingDialog(tk.Toplevel):
                 "type": self.t_type.get(),
                 "channel": -1 if chan == "Any" else int(chan) - 1,
                 "number": number,
-                "value": int(raw_val) if raw_val.isdigit() else None,
+                "value": value,
             },
         })
         self.result = self.mapping

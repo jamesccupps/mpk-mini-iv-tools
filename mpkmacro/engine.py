@@ -148,6 +148,36 @@ def matches(mapping, status, d1, d2):
     return True
 
 
+ANY_WORDS = ("", "-1", "any", "*")
+
+
+def parse_trigger_fields(trig_type, number_text, value_text):
+    """Validate the editor's Note/CC # and value boxes -> (number, value).
+
+    Blank (or 'any') is the wildcard. Anything else must be 0-127. A typo must
+    raise rather than quietly widen the trigger: '3a' used to become "any
+    note", which fires the macro on every key.
+    """
+    def field(text, label):
+        text = (text or "").strip().lower()
+        if text in ANY_WORDS:
+            return None
+        try:
+            n = int(text)
+        except ValueError:
+            raise ValueError(f"{label} must be a number 0-127, or blank for any "
+                             f"(got {text!r})") from None
+        if not 0 <= n <= 127:
+            raise ValueError(f"{label} must be 0-127 (got {n})")
+        return n
+
+    number = field(number_text, "Note / CC #")
+    value = field(value_text, "Value")
+    if trig_type in ("pitchbend", "aftertouch") or number is None:
+        number = -1                       # no number to match on
+    return number, value
+
+
 def describe_trigger(trig):
     t = trig.get("type", "?")
     ch = trig.get("channel", -1)

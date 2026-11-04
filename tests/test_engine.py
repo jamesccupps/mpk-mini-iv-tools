@@ -175,6 +175,46 @@ class TestProfiles(unittest.TestCase):
                     self.assertFalse(m.get("enabled", True))
 
 
+class TestTriggerFields(unittest.TestCase):
+    """What the macro editor accepts in its Note/CC # and value boxes."""
+
+    def parse(self, number, value="", kind="note_on"):
+        return eng.parse_trigger_fields(kind, number, value)
+
+    def test_plain_numbers(self):
+        self.assertEqual(self.parse("36", "127"), (36, 127))
+
+    def test_blank_is_the_wildcard(self):
+        self.assertEqual(self.parse("", ""), (-1, None))
+        self.assertEqual(self.parse("any", " "), (-1, None))
+        self.assertEqual(self.parse("-1", "-1"), (-1, None))
+
+    def test_typo_is_refused_not_widened(self):
+        """'3a' used to save as "any note" and fire on every key."""
+        for bad in ("3a", "C3", "36.0", "x"):
+            with self.subTest(text=bad):
+                with self.assertRaises(ValueError):
+                    self.parse(bad)
+        with self.assertRaises(ValueError):
+            self.parse("36", "loud")
+
+    def test_out_of_midi_range_is_refused(self):
+        for bad in ("128", "200", "-5"):
+            with self.subTest(text=bad):
+                with self.assertRaises(ValueError):
+                    self.parse(bad)
+
+    def test_pitchbend_has_no_number(self):
+        self.assertEqual(self.parse("64", kind="pitchbend"), (-1, None))
+
+    def test_result_matches_like_the_editor_meant(self):
+        number, value = self.parse("37")
+        m = {"enabled": True, "trigger": {"type": "note_on", "channel": -1,
+                                          "number": number, "value": value}}
+        self.assertTrue(eng.matches(m, NOTE_ON, 37, 90))
+        self.assertFalse(eng.matches(m, NOTE_ON, 38, 90))
+
+
 def profile(name, match_app=""):
     return eng.Profile({"name": name, "match_app": match_app, "mappings": []})
 
