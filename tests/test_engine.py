@@ -215,6 +215,48 @@ class TestTriggerFields(unittest.TestCase):
         self.assertFalse(eng.matches(m, NOTE_ON, 38, 90))
 
 
+class TestProfileNames(unittest.TestCase):
+    """A profile name becomes a filename, so it has to be a safe one."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = self.tmp.name
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def error(self, name, existing=("My Macros",)):
+        return eng.profile_name_error(name, list(existing), self.dir)
+
+    def test_ordinary_names_are_fine(self):
+        for ok in ("Ableton", "FL Studio 21", "Photoshop (brushes)", "v1.2"):
+            with self.subTest(name=ok):
+                self.assertIsNone(self.error(ok))
+
+    def test_duplicate_is_refused_case_insensitively(self):
+        """Used to overwrite the existing profile's file with an empty one."""
+        self.assertIsNotNone(self.error("My Macros"))
+        self.assertIsNotNone(self.error("my macros"))
+
+    def test_existing_file_is_refused(self):
+        """A file that failed to load is still somebody's macros."""
+        with open(os.path.join(self.dir, "Broken.json"), "w") as fh:
+            fh.write("{not json")
+        self.assertIsNotNone(self.error("Broken"))
+
+    def test_path_characters_are_refused(self):
+        for bad in ("a/b", "a\\b", "..\\..\\x", "x:y", "what?", "a*", 'q"'):
+            with self.subTest(name=bad):
+                self.assertIsNotNone(self.error(bad))
+
+    def test_reserved_and_blank_are_refused(self):
+        for bad in ("", "   ", "CON", "nul", "com1", "LPT9.txt", "trailing.",
+                    " padded"):
+            with self.subTest(name=bad):
+                self.assertIsNotNone(self.error(bad))
+
+
 def profile(name, match_app=""):
     return eng.Profile({"name": name, "match_app": match_app, "mappings": []})
 

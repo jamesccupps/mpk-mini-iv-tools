@@ -86,6 +86,34 @@ class Profile:
         return exe.lower() in wanted
 
 
+_BAD_CHARS = set('<>:"/\\|?*')
+_RESERVED = {"con", "prn", "aux", "nul",
+             *(f"com{i}" for i in range(1, 10)), *(f"lpt{i}" for i in range(1, 10))}
+
+
+def profile_name_error(name, existing_names, profile_dir=None):
+    """Why `name` can't be a new profile (it becomes <name>.json), or None.
+
+    Without this, a duplicate name silently overwrote that profile's file, a
+    slash created a subfolder that load_profiles() never looks in, and a colon
+    wrote an NTFS alternate data stream.
+    """
+    if not name or not name.strip():
+        return "Give the profile a name."
+    if name != name.strip() or name.endswith("."):
+        return "A profile name can't start or end with a space, or end with a dot."
+    if any(c in _BAD_CHARS or ord(c) < 32 for c in name):
+        return 'A profile name can\'t contain any of  < > : " / \\ | ? *'
+    if name.split(".")[0].lower() in _RESERVED:
+        return f"'{name}' is a reserved name on Windows."
+    if name.lower() in (n.lower() for n in existing_names):
+        return f"There is already a profile called '{name}'."
+    path = Path(profile_dir or PROFILE_DIR) / f"{name}.json"
+    if path.exists():
+        return f"{path.name} already exists in the profiles folder."
+    return None
+
+
 def load_profiles():
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     profiles = []

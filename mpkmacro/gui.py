@@ -646,7 +646,11 @@ class App(tk.Tk):
         ttk.Entry(dlg, textvariable=var, width=30).pack(padx=12)
 
         def ok():
-            name = var.get().strip() or "New profile"
+            name = var.get().strip()
+            problem = eng.profile_name_error(name, [p.name for p in self.profiles])
+            if problem:
+                messagebox.showerror("Profile name", problem, parent=dlg)
+                return
             prof = eng.Profile({"name": name, "match_app": "", "mappings": []})
             prof.save(eng.PROFILE_DIR / f"{name}.json")
             self.profiles.append(prof)
