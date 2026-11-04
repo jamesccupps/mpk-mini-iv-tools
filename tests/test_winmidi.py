@@ -75,7 +75,12 @@ class TestSysexSend(unittest.TestCase):
 
     def test_returns_only_once_the_driver_is_done(self):
         out = winmidi.MidiOut()
-        out.open(winmidi.output_devices().index(SYNTH))
+        try:
+            out.open(winmidi.output_devices().index(SYNTH))
+        except winmidi.MidiError as exc:
+            # GitHub's Windows runners list the synth but have no audio
+            # endpoint behind it, so opening fails (MMSYSERR_ERROR).
+            self.skipTest(f"{SYNTH} is listed but won't open here: {exc}")
         try:
             started = time.monotonic()
             out.send_sysex([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7])
