@@ -231,3 +231,7 @@ identity fixture is zeroed.
   details. The launcher uses `pythonw`, so there is no console.
 - MIDI callbacks do the minimum on the system thread and hand off to a worker,
   which is why SysEx dumps arrive intact.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
