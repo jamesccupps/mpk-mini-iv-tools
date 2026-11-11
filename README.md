@@ -28,7 +28,7 @@ the keyboard.*
 >
 > - **Requesting a preset appears to make the keyboard load it.** Sweeping every
 >   slot leaves the unit on the last one read, with different pad assignments
->   and colours. To recover: SHIFT + PLUGIN/DAW → encoder → your preset.
+>   and colors. To recover: SHIFT + PLUGIN/DAW → encoder → your preset.
 > - **Never send a guessed opcode.** An early version of `re_probe.py` swept an
 >   invented opcode and changed device state. Everything here now sends only
 >   opcodes confirmed against hardware.
